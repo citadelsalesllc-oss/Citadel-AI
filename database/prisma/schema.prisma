@@ -1,0 +1,116 @@
+// Citadel AI — Prisma schema
+// PostgreSQL is used for real multi-tenant persistence. Structured, frequently
+// queried fields (status, type, foreign keys) are real columns; flexible
+// per-client knowledge (services, brand rules, FAQs, etc.) is stored as JSON
+// to avoid a sprawl of join tables the MVP doesn't need yet. See
+// ARCHITECTURE.md "Client memory system" for the tradeoff.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  companyName String
+  description String?
+  industry    String?
+  serviceArea String[] @default([])
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+
+  // Structured-JSON knowledge fields. Shapes are defined and validated in
+  // @citadel/shared (Service, Offer, Competitor, Faq, BrandRules).
+  services        Json @default("[]")
+  targetCustomers String[] @default([])
+  brandRules      Json @default("{\"forbiddenPhrases\":[],\"preferredPhrases\":[],\"styleNotes\":[]}")
+  offers          Json @default("[]")
+  competitors     Json @default("[]")
+  seoKeywords     String[] @default([])
+  locations       String[] @default([])
+  faqs            Json @default("[]")
+  notes           String[] @default([])
+
+  contentItems ContentItem[]
+  auditLogs    AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clients")
+}
+
+enum ContentType {
+  SOCIAL_POST
+  INSTAGRAM_CAPTION
+  GOOGLE_BUSINESS_POST
+  BLOG_POST
+  WEBSITE_COPY
+  EMAIL
+  REVIEW_RESPONSE
+  CONTENT_CALENDAR
+  OTHER
+
+  @@map("content_type")
+}
+
+enum ContentStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  REVISION_REQUIRED
+  FAILED
+
+  @@map("content_status")
+}
+
+model ContentItem {
+  id     String        @id @default(cuid())
+  client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  type   ContentType
+  status ContentStatus @default(DRAFT)
+
+  body     String
+  metadata Json   @default("{}")
+
+  createdBy String
+  reviewer  String?
+
+  approvedAt      DateTime?
+  publishedAt     DateTime?
+  externalId      String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, status])
+  @@map("content_items")
+}
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId String?
+
+  actor      String
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json   @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@map("audit_logs")
+}

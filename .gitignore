@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+coverage/
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.pnpm-store/
+database/prisma/generated/
+database/generated/
+.turbo/

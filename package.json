@@ -1,0 +1,33 @@
+{
+  "name": "citadel-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Citadel AI — proprietary AI marketing operating system for Citadel Sales & Marketing",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./shared --filter=./database --filter=./integrations --filter=./tools --filter=./agents --filter=./skills --filter=./apps/* run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "pnpm --filter @citadel/database run generate",
+    "db:migrate": "pnpm --filter @citadel/database run migrate",
+    "db:seed": "pnpm --filter @citadel/database run seed",
+    "dev:api": "pnpm --filter @citadel/api run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
