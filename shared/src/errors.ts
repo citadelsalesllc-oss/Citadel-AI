@@ -23,6 +23,22 @@ export class ClientNotFoundError extends CitadelError {
 }
 
 /**
+ * Thrown when a client-scoped record (service, offer, FAQ, etc.) either
+ * doesn't exist or doesn't belong to the client it was requested under.
+ * Deliberately the SAME error for both cases — a caller must never be able
+ * to distinguish "wrong id" from "that record belongs to another client"
+ * (that distinction itself would leak cross-tenant information). This is
+ * the tenant-isolation enforcement point: every repository method that
+ * looks up a child record by id re-checks clientId and throws this instead
+ * of returning another tenant's row.
+ */
+export class ResourceNotFoundError extends CitadelError {
+  constructor(resourceType: string, id: string) {
+    super(`${resourceType} not found: ${id}`, 'RESOURCE_NOT_FOUND');
+  }
+}
+
+/**
  * Thrown when a fact needed to complete a request is not present in the
  * client's stored profile. Agents must raise this instead of inventing the
  * missing fact (phone numbers, prices, services, statistics, etc.).
@@ -47,6 +63,13 @@ export class NotConfiguredError extends CitadelError {
 export class NotImplementedError extends CitadelError {
   constructor(capability: string) {
     super(`${capability} is not implemented yet.`, 'NOT_IMPLEMENTED');
+  }
+}
+
+/** Thrown when a create would violate a uniqueness constraint (e.g. a client slug already in use). */
+export class DuplicateRecordError extends CitadelError {
+  constructor(resourceType: string, field: string, value: string) {
+    super(`${resourceType} with ${field} "${value}" already exists`, 'DUPLICATE_RECORD');
   }
 }
 

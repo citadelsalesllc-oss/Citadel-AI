@@ -1,4 +1,4 @@
-import type { ClientProfile } from '@citadel/shared';
+import type { ClientContext } from '@citadel/shared';
 
 export interface BrandQaIssue {
   code: string;
@@ -25,9 +25,10 @@ function normalizeDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-export function checkForbiddenPhrases(body: string, client: ClientProfile): BrandQaIssue[] {
+export function checkForbiddenPhrases(body: string, client: ClientContext): BrandQaIssue[] {
   const lowerBody = body.toLowerCase();
-  return client.brandRules.forbiddenPhrases
+  const forbidden = client.brandProfile?.forbiddenPhrases ?? [];
+  return forbidden
     .filter((phrase) => lowerBody.includes(phrase.toLowerCase()))
     .map((phrase) => ({
       code: 'FORBIDDEN_PHRASE',
@@ -36,9 +37,9 @@ export function checkForbiddenPhrases(body: string, client: ClientProfile): Bran
     }));
 }
 
-export function checkInventedPhoneNumbers(body: string, client: ClientProfile): BrandQaIssue[] {
+export function checkInventedPhoneNumbers(body: string, client: ClientContext): BrandQaIssue[] {
   const matches = body.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) ?? [];
-  const clientDigits = client.phone ? normalizeDigits(client.phone) : null;
+  const clientDigits = client.core.phone ? normalizeDigits(client.core.phone) : null;
   const issues: BrandQaIssue[] = [];
   for (const match of matches) {
     const digits = normalizeDigits(match);
@@ -53,9 +54,13 @@ export function checkInventedPhoneNumbers(body: string, client: ClientProfile): 
   return issues;
 }
 
-export function checkInventedPrices(body: string, client: ClientProfile): BrandQaIssue[] {
+export function checkInventedPrices(body: string, client: ClientContext): BrandQaIssue[] {
   const matches = body.match(/\$\s?\d+(\.\d{2})?/g) ?? [];
   if (matches.length === 0) return [];
+  // Stringifying the whole context (core fields + services + offers + FAQs
+  // + notes) is a deliberately broad net: any price the model wrote must
+  // appear SOMEWHERE in what the client actually gave us, not just in the
+  // one field most likely to hold it.
   const clientText = JSON.stringify(client);
   return matches
     .filter((price) => !clientText.includes(price.replace(/\s/g, '')))

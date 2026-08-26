@@ -1,4 +1,4 @@
-export { clientLookupTool, clientUpdateTool } from './client-tools.js';
+export { clientLookupTool, clientContextTool, clientUpdateTool } from './client-tools.js';
 export { contentSaveTool, contentSearchTool } from './content-tools.js';
 export {
   approvalRequestTool,

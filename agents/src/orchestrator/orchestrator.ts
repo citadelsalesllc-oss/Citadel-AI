@@ -2,7 +2,7 @@ import {
   BrandQaFailedError,
   NotImplementedError,
   type AgentRegistry,
-  type ClientProfile,
+  type ClientContext,
   type RequestActor,
   type SkillRegistry,
   type ToolRegistry,
@@ -39,8 +39,8 @@ export class Orchestrator {
   ) {}
 
   async handle(request: OrchestratorRequest): Promise<OrchestratorResult> {
-    const client = await this.toolRegistry.call<ClientProfile>(
-      'client_lookup',
+    const client = await this.toolRegistry.call<ClientContext>(
+      'client_context',
       { idOrSlug: request.clientIdOrSlug },
       { actor: request.actor, requestId: request.requestId },
     );

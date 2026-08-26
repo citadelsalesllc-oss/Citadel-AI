@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   BrandQaFailedError,
-  type ClientProfile,
+  type ClientContext,
   type ContentItem,
   type Skill,
   type SkillContext,
@@ -41,8 +41,8 @@ export function createCreateSocialPostSkill(deps: CreateSocialPostDeps): Skill<C
     description: "Create an on-brand social/content post for a client (Facebook, Instagram, Google Business, blog, website, or email) and save it as a draft.",
     inputSchema: CreateSocialPostInputSchema,
     async run(input, context: SkillContext): Promise<CreateSocialPostOutput> {
-      const client = await deps.toolRegistry.call<ClientProfile>(
-        'client_lookup',
+      const client = await deps.toolRegistry.call<ClientContext>(
+        'client_context',
         { idOrSlug: input.clientIdOrSlug },
         { actor: context.actor, requestId: context.requestId },
       );
@@ -66,18 +66,18 @@ export function createCreateSocialPostSkill(deps: CreateSocialPostDeps): Skill<C
       const contentItem = await deps.toolRegistry.call<ContentItem>(
         'content_save',
         {
-          clientId: client.id,
+          clientId: client.core.id,
           type: generation.contentType,
+          platform: input.platform,
           body: generation.body,
           metadata: {
-            platform: input.platform,
             instruction: input.instruction,
             modelUsed: generation.modelUsed,
             providerUsed: generation.providerUsed,
             qaWarnings: qa.issues.filter((issue) => issue.severity === 'warning'),
           },
         },
-        { actor: context.actor, requestId: context.requestId, clientId: client.id },
+        { actor: context.actor, requestId: context.requestId, clientId: client.core.id },
       );
 
       return {

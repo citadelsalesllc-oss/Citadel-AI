@@ -41,7 +41,7 @@ TypeScript config: `tsconfig.base.json` at the repo root (strict mode, `NodeNext
 
 ## Adding a new specialist agent
 
-1. Create `agents/src/<name>/` with an `Agent<Input, Output>` implementation (see `agents/src/content/content-agent.ts` for the pattern: constructor takes only interfaces, `run(input, context)` where `context.client` is already the resolved `ClientProfile`).
+1. Create `agents/src/<name>/` with an `Agent<Input, Output>` implementation (see `agents/src/content/content-agent.ts` for the pattern: constructor takes only interfaces, `run(input, context)` where `context.client` is already the resolved `ClientContext`).
 2. If it's replacing a stub, remove its `createStubAgent(...)` registration in `agents/src/orchestrator/agent-registry.ts` and register the real agent instead.
 3. Add routing keywords for it in `agents/src/orchestrator/router.ts` if the Orchestrator should reach it directly, or wrap it in a `Skill` (see below) if it needs to persist a result.
 4. Write unit tests colocated with the agent (`*.test.ts`) using `agents/src/test-fixtures.ts`'s `makeTestClient()`.

@@ -1,9 +1,19 @@
 // Citadel AI — Prisma schema
-// PostgreSQL is used for real multi-tenant persistence. Structured, frequently
-// queried fields (status, type, foreign keys) are real columns; flexible
-// per-client knowledge (services, brand rules, FAQs, etc.) is stored as JSON
-// to avoid a sprawl of join tables the MVP doesn't need yet. See
-// ARCHITECTURE.md "Client memory system" for the tradeoff.
+//
+// Phase 2 replaces the Phase 1 JSON-blob client fields with a normalized
+// structure: a lean core `Client` record plus one-to-many tables (Service,
+// ServiceArea, Offer, Faq, MarketingNote) and one-to-one "profile" tables
+// (BrandProfile, TargetAudience, SeoProfile). This is a knowledge system,
+// not a generic CRM: every child table exists because a specialist agent
+// needs that specific, structured slice of context (see
+// database/src/client-context.ts and ARCHITECTURE.md "Client memory
+// system"), not because a CRM schema conventionally has one.
+//
+// Tenant isolation is enforced at the repository layer (every child-record
+// lookup is scoped by clientId, not just record id — see
+// database/src/repositories/*), not by the schema alone; the `clientId`
+// foreign key + index on every child table is what makes that scoping
+// possible and fast.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,37 +24,198 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@map("client_status")
+}
+
 model Client {
-  id          String  @id @default(cuid())
-  slug        String  @unique
+  id          String       @id @default(cuid())
+  // Not in the spec's minimum field list, kept as an additive, human-friendly
+  // identifier — the API and demo flows already depend on it, and it costs
+  // nothing structurally.
+  slug        String       @unique
   companyName String
-  description String?
+  legalName   String?
   industry    String?
-  serviceArea String[] @default([])
-  address     String?
+  description String?
+  website     String?
   phone       String?
   email       String?
-  website     String?
+  address     String?
+  city        String?
+  state       String?
+  zip         String?
+  timezone    String?
+  status      ClientStatus @default(PROSPECT)
 
-  // Structured-JSON knowledge fields. Shapes are defined and validated in
-  // @citadel/shared (Service, Offer, Competitor, Faq, BrandRules).
-  services        Json @default("[]")
-  targetCustomers String[] @default([])
-  brandRules      Json @default("{\"forbiddenPhrases\":[],\"preferredPhrases\":[],\"styleNotes\":[]}")
-  offers          Json @default("[]")
-  competitors     Json @default("[]")
-  seoKeywords     String[] @default([])
-  locations       String[] @default([])
-  faqs            Json @default("[]")
-  notes           String[] @default([])
-
-  contentItems ContentItem[]
-  auditLogs    AuditLog[]
+  services        Service[]
+  serviceAreas    ServiceArea[]
+  brandProfile    BrandProfile?
+  targetAudience  TargetAudience?
+  seoProfile      SeoProfile?
+  offers          Offer[]
+  faqs            Faq[]
+  marketingNotes  MarketingNote[]
+  contentItems    ContentItem[]
+  auditLogs       AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("clients")
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  client      Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId    String
+  serviceName String
+  description String?
+  priority    Int     @default(0)
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("services")
+}
+
+model ServiceArea {
+  id       String  @id @default(cuid())
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  name     String
+  city     String?
+  state    String?
+  priority Int     @default(0)
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("service_areas")
+}
+
+/// One per client. Everything a Content/Brand-QA agent needs to write "in voice."
+model BrandProfile {
+  id       String @id @default(cuid())
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String @unique
+
+  brandVoice                 String?
+  tone                       String?
+  preferredPhrases           String[] @default([])
+  forbiddenPhrases           String[] @default([])
+  writingStyle                String?
+  emojiPolicy                 String?
+  capitalizationPreferences   String?
+  ctaPreferences               String?
+  otherRules                  String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("brand_profiles")
+}
+
+/// One per client. Who the content is written for and what argument it needs to make.
+model TargetAudience {
+  id       String @id @default(cuid())
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String @unique
+
+  primaryCustomer     String?
+  secondaryCustomers  String[] @default([])
+  customerProblems    String[] @default([])
+  buyingMotivations   String[] @default([])
+  objections          String[] @default([])
+  geographicTargeting String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("target_audiences")
+}
+
+/// One per client. Input for the (future) SEO Agent; also informs content generation.
+model SeoProfile {
+  id       String @id @default(cuid())
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String @unique
+
+  primaryKeywords   String[] @default([])
+  secondaryKeywords String[] @default([])
+  targetLocations   String[] @default([])
+  priorityServices  String[] @default([])
+  searchIntent      String?
+  // Competitor names only — a full relational Competitor entity (with its
+  // own notes/history) is more structure than a knowledge system needs
+  // today; add one later if a real use case needs per-competitor detail.
+  competitors       String[] @default([])
+  seoNotes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("seo_profiles")
+}
+
+model Offer {
+  id           String    @id @default(cuid())
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  offerName    String
+  description  String?
+  cta          String?
+  restrictions String?
+  active       Boolean   @default(true)
+  startDate    DateTime?
+  endDate      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("offers")
+}
+
+model Faq {
+  id       String  @id @default(cuid())
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  question String
+  answer   String
+  category String?
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("faqs")
+}
+
+model MarketingNote {
+  id       String  @id @default(cuid())
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  note     String
+  category String?
+  priority Int     @default(0)
+  source   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("marketing_notes")
 }
 
 enum ContentType {
@@ -68,20 +239,30 @@ enum ContentStatus {
   PUBLISHED
   REJECTED
   REVISION_REQUIRED
+  // Not part of the Phase 2 spec's minimum status list, kept from Phase 1:
+  // records a publish *attempt* that errored (as opposed to REJECTED, which
+  // is a human editorial decision). Only reachable from APPROVED.
   FAILED
 
   @@map("content_status")
 }
 
 model ContentItem {
-  id     String        @id @default(cuid())
-  client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id       String        @id @default(cuid())
+  client   Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId String
-  type   ContentType
-  status ContentStatus @default(DRAFT)
+  type     ContentType
+  status   ContentStatus @default(DRAFT)
 
+  // Distinct from `type`: type is the kind of content, platform is where it's
+  // headed (facebook/instagram/google_business/... or null for
+  // platform-agnostic content like a blog post draft).
+  platform String?
+  title    String?
   body     String
-  metadata Json   @default("{}")
+  campaign String?
+  tags     String[] @default([])
+  metadata Json     @default("{}")
 
   createdBy String
   reviewer  String?

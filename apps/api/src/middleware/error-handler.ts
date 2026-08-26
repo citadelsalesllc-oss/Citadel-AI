@@ -1,9 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 import { CitadelError } from '@citadel/shared';
 
 const STATUS_BY_CODE: Record<string, number> = {
   CLIENT_NOT_FOUND: 404,
+  RESOURCE_NOT_FOUND: 404,
+  DUPLICATE_RECORD: 409,
   MISSING_INFORMATION: 422,
   NOT_CONFIGURED: 501,
   NOT_IMPLEMENTED: 501,
@@ -28,6 +31,16 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       body.error = { ...(body.error as object), issues: (err as { issues: unknown }).issues };
     }
     res.status(status).json(body);
+    return;
+  }
+
+  // Safety net: every route resolves the client first, so a foreign-key
+  // violation on a child-record write shouldn't be reachable in practice —
+  // but if it ever is, report it as an invalid relationship, not a 500.
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+    res.status(400).json({
+      error: { message: 'Invalid relationship: the referenced client does not exist', code: 'INVALID_RELATIONSHIP' },
+    });
     return;
   }
 

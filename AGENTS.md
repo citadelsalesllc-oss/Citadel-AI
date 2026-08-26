@@ -1,11 +1,11 @@
 # Agents
 
-All agents implement the shared `Agent<Input, Output>` interface (`shared/src/agent.ts`): a `name`, `description`, and `run(input, context)` where `context.client` is an already-resolved `ClientProfile` and `context.actor`/`context.requestId` are for audit logging. Agents never fetch their own client data or call a model SDK directly — both are injected, which is what makes every agent below unit-testable with fakes.
+All agents implement the shared `Agent<Input, Output>` interface (`shared/src/agent.ts`): a `name`, `description`, and `run(input, context)` where `context.client` is an already-resolved `ClientContext` (Phase 2's full client knowledge aggregate — `{ core, services, serviceAreas, brandProfile, targetAudience, seoProfile, offers, faqs, marketingNotes, recentContent }`, see ARCHITECTURE.md "Knowledge retrieval") and `context.actor`/`context.requestId` are for audit logging. Agents never fetch their own client data or call a model SDK directly — both are injected, which is what makes every agent below unit-testable with fakes.
 
 ## Orchestrator (`agents/src/orchestrator/`) — **implemented**
 
 The entry point. `Orchestrator.handle(request)`:
-1. Resolves the client via the `client_lookup` tool (fails fast with `ClientNotFoundError` — never falls back to another client).
+1. Resolves the client via the `client_context` tool (fails fast with `ClientNotFoundError` — never falls back to another client).
 2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below.
 3. Delegates and normalizes the outcome into one response shape, including honest `not_implemented` and `unsupported` results (never a fabricated answer, never a crash on an unrecognized request).
 

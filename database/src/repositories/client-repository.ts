@@ -1,6 +1,13 @@
-import { ClientNotFoundError, type ClientProfile, type CreateClientInput, type UpdateClientInput } from '@citadel/shared';
+import { Prisma } from '@prisma/client';
+import {
+  ClientNotFoundError,
+  DuplicateRecordError,
+  type ClientRecord,
+  type CreateClientInput,
+  type UpdateClientInput,
+} from '@citadel/shared';
 import { prisma } from '../prisma.js';
-import { toClientProfile } from '../mappers.js';
+import { toClientRecord } from '../mappers.js';
 
 function slugify(companyName: string): string {
   return companyName
@@ -10,35 +17,42 @@ function slugify(companyName: string): string {
     .replace(/(^-|-$)/g, '');
 }
 
+function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 export const clientRepository = {
-  async create(input: CreateClientInput): Promise<ClientProfile> {
+  async create(input: CreateClientInput): Promise<ClientRecord> {
     const slug = input.slug?.trim() || slugify(input.companyName);
-    const row = await prisma.client.create({
-      data: {
-        slug,
-        companyName: input.companyName,
-        description: input.description,
-        industry: input.industry,
-        serviceArea: input.serviceArea ?? [],
-        address: input.address,
-        phone: input.phone,
-        email: input.email,
-        website: input.website,
-        services: input.services ?? [],
-        targetCustomers: input.targetCustomers ?? [],
-        brandRules: input.brandRules ?? { forbiddenPhrases: [], preferredPhrases: [], styleNotes: [] },
-        offers: input.offers ?? [],
-        competitors: input.competitors ?? [],
-        seoKeywords: input.seoKeywords ?? [],
-        locations: input.locations ?? [],
-        faqs: input.faqs ?? [],
-        notes: input.notes ?? [],
-      },
-    });
-    return toClientProfile(row);
+    try {
+      const row = await prisma.client.create({
+        data: {
+          slug,
+          companyName: input.companyName,
+          legalName: input.legalName,
+          industry: input.industry,
+          description: input.description,
+          website: input.website,
+          phone: input.phone,
+          email: input.email,
+          address: input.address,
+          city: input.city,
+          state: input.state,
+          zip: input.zip,
+          timezone: input.timezone,
+          status: input.status,
+        },
+      });
+      return toClientRecord(row);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new DuplicateRecordError('Client', 'slug', slug);
+      }
+      throw error;
+    }
   },
 
-  async update(idOrSlug: string, input: UpdateClientInput): Promise<ClientProfile> {
+  async update(idOrSlug: string, input: UpdateClientInput): Promise<ClientRecord> {
     const existing = await this.findByIdOrSlug(idOrSlug);
     if (!existing) {
       throw new ClientNotFoundError(idOrSlug);
@@ -47,35 +61,31 @@ export const clientRepository = {
       where: { id: existing.id },
       data: {
         companyName: input.companyName,
-        description: input.description,
+        legalName: input.legalName,
         industry: input.industry,
-        serviceArea: input.serviceArea,
-        address: input.address,
+        description: input.description,
+        website: input.website,
         phone: input.phone,
         email: input.email,
-        website: input.website,
-        services: input.services,
-        targetCustomers: input.targetCustomers,
-        brandRules: input.brandRules,
-        offers: input.offers,
-        competitors: input.competitors,
-        seoKeywords: input.seoKeywords,
-        locations: input.locations,
-        faqs: input.faqs,
-        notes: input.notes,
+        address: input.address,
+        city: input.city,
+        state: input.state,
+        zip: input.zip,
+        timezone: input.timezone,
+        status: input.status,
       },
     });
-    return toClientProfile(row);
+    return toClientRecord(row);
   },
 
-  async findByIdOrSlug(idOrSlug: string): Promise<ClientProfile | null> {
+  async findByIdOrSlug(idOrSlug: string): Promise<ClientRecord | null> {
     const row = await prisma.client.findFirst({
       where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     });
-    return row ? toClientProfile(row) : null;
+    return row ? toClientRecord(row) : null;
   },
 
-  async requireByIdOrSlug(idOrSlug: string): Promise<ClientProfile> {
+  async requireByIdOrSlug(idOrSlug: string): Promise<ClientRecord> {
     const client = await this.findByIdOrSlug(idOrSlug);
     if (!client) {
       throw new ClientNotFoundError(idOrSlug);
@@ -83,8 +93,8 @@ export const clientRepository = {
     return client;
   },
 
-  async list(): Promise<ClientProfile[]> {
+  async list(): Promise<ClientRecord[]> {
     const rows = await prisma.client.findMany({ orderBy: { createdAt: 'desc' } });
-    return rows.map(toClientProfile);
+    return rows.map(toClientRecord);
   },
 };

@@ -6,25 +6,28 @@ import { prisma } from './prisma.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const knowledgeClientsDir = path.resolve(__dirname, '../../knowledge/clients');
 
+/**
+ * Seed files intentionally support ONLY the core Client fields. Per the
+ * Phase 2 data-integrity rule, seed data must never invent business facts
+ * — additional knowledge (services, brand profile, SEO profile, etc.) gets
+ * added through the knowledge-management API as it becomes actually known,
+ * not hardcoded here. See knowledge/clients/*.json for the "why" on each
+ * seed file.
+ */
 interface SeedClientFile {
   slug: string;
   companyName: string;
-  description?: string;
+  legalName?: string;
   industry?: string;
-  serviceArea?: string[];
-  address?: string;
+  description?: string;
+  website?: string;
   phone?: string;
   email?: string;
-  website?: string;
-  services?: unknown;
-  targetCustomers?: string[];
-  brandRules?: unknown;
-  offers?: unknown;
-  competitors?: unknown;
-  seoKeywords?: string[];
-  locations?: string[];
-  faqs?: unknown;
-  notes?: string[];
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  timezone?: string;
 }
 
 const SEED_FILES = ['cda-septic-systems.json'];
@@ -34,47 +37,30 @@ async function seedClient(fileName: string): Promise<void> {
   const raw = readFileSync(filePath, 'utf-8');
   const data = JSON.parse(raw) as SeedClientFile;
 
+  // `?? null` (not left as `undefined`) is deliberate: Prisma's `update`
+  // treats an `undefined` field as "leave whatever is already there," which
+  // would let stale/invented data from a previous seed run silently survive
+  // a re-seed that removed it from the source file. Re-seeding must fully
+  // replace the record with exactly what's in the file — nothing more.
+  const fields = {
+    companyName: data.companyName,
+    legalName: data.legalName ?? null,
+    industry: data.industry ?? null,
+    description: data.description ?? null,
+    website: data.website ?? null,
+    phone: data.phone ?? null,
+    email: data.email ?? null,
+    address: data.address ?? null,
+    city: data.city ?? null,
+    state: data.state ?? null,
+    zip: data.zip ?? null,
+    timezone: data.timezone ?? null,
+  };
+
   await prisma.client.upsert({
     where: { slug: data.slug },
-    create: {
-      slug: data.slug,
-      companyName: data.companyName,
-      description: data.description,
-      industry: data.industry,
-      serviceArea: data.serviceArea ?? [],
-      address: data.address,
-      phone: data.phone,
-      email: data.email,
-      website: data.website,
-      services: (data.services as never) ?? [],
-      targetCustomers: data.targetCustomers ?? [],
-      brandRules: (data.brandRules as never) ?? { forbiddenPhrases: [], preferredPhrases: [], styleNotes: [] },
-      offers: (data.offers as never) ?? [],
-      competitors: (data.competitors as never) ?? [],
-      seoKeywords: data.seoKeywords ?? [],
-      locations: data.locations ?? [],
-      faqs: (data.faqs as never) ?? [],
-      notes: data.notes ?? [],
-    },
-    update: {
-      companyName: data.companyName,
-      description: data.description,
-      industry: data.industry,
-      serviceArea: data.serviceArea ?? [],
-      address: data.address,
-      phone: data.phone,
-      email: data.email,
-      website: data.website,
-      services: (data.services as never) ?? [],
-      targetCustomers: data.targetCustomers ?? [],
-      brandRules: (data.brandRules as never) ?? { forbiddenPhrases: [], preferredPhrases: [], styleNotes: [] },
-      offers: (data.offers as never) ?? [],
-      competitors: (data.competitors as never) ?? [],
-      seoKeywords: data.seoKeywords ?? [],
-      locations: data.locations ?? [],
-      faqs: (data.faqs as never) ?? [],
-      notes: data.notes ?? [],
-    },
+    create: { slug: data.slug, ...fields },
+    update: fields,
   });
 
   console.log(`Seeded client: ${data.companyName} (${data.slug})`);

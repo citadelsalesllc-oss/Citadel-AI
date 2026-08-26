@@ -1,5 +1,14 @@
 export { prisma } from './prisma.js';
 export { clientRepository } from './repositories/client-repository.js';
+export { serviceRepository } from './repositories/service-repository.js';
+export { serviceAreaRepository } from './repositories/service-area-repository.js';
+export { brandProfileRepository } from './repositories/brand-profile-repository.js';
+export { targetAudienceRepository } from './repositories/target-audience-repository.js';
+export { seoProfileRepository } from './repositories/seo-profile-repository.js';
+export { offerRepository } from './repositories/offer-repository.js';
+export { faqRepository } from './repositories/faq-repository.js';
+export { marketingNoteRepository } from './repositories/marketing-note-repository.js';
 export { contentRepository } from './repositories/content-repository.js';
 export { auditRepository } from './repositories/audit-repository.js';
+export { getClientContext } from './client-context.js';
 export * from './mappers.js';

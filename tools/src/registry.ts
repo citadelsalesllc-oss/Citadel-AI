@@ -2,7 +2,7 @@ import { ToolRegistry } from '@citadel/shared';
 import type { PublishAdapter } from '@citadel/integrations/social';
 import { createPublishAdapterFromEnv } from '@citadel/integrations/social';
 import { WebsiteFetchAdapter } from '@citadel/integrations/websites';
-import { clientLookupTool, clientUpdateTool } from './client-tools.js';
+import { clientLookupTool, clientContextTool, clientUpdateTool } from './client-tools.js';
 import { contentSaveTool, contentSearchTool } from './content-tools.js';
 import {
   approvalRequestTool,
@@ -26,6 +26,7 @@ export function createToolRegistry(options: ToolRegistryOptions = {}): ToolRegis
   const publishAdapter = options.publishAdapter ?? createPublishAdapterFromEnv();
 
   registry.register(clientLookupTool);
+  registry.register(clientContextTool);
   registry.register(clientUpdateTool);
   registry.register(contentSaveTool);
   registry.register(contentSearchTool);

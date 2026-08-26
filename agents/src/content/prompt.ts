@@ -1,4 +1,4 @@
-import type { ClientProfile } from '@citadel/shared';
+import type { ClientContext } from '@citadel/shared';
 import type { ContentPlatform } from './types.js';
 
 const PLATFORM_STYLE_NOTES: Record<ContentPlatform, string> = {
@@ -10,21 +10,25 @@ const PLATFORM_STYLE_NOTES: Record<ContentPlatform, string> = {
   email: 'Marketing email: clear subject-appropriate opening, concise body, one clear call to action.',
 };
 
-export function buildContentSystemPrompt(client: ClientProfile, platform: ContentPlatform): string {
-  const rules = client.brandRules;
+export function buildContentSystemPrompt(context: ClientContext, platform: ContentPlatform): string {
+  const brand = context.brandProfile;
   const lines = [
-    `You are the Citadel AI Content Agent writing on behalf of "${client.companyName}", a ${client.industry ?? 'local'} business.`,
+    `You are the Citadel AI Content Agent writing on behalf of "${context.core.companyName}", a ${context.core.industry ?? 'local'} business.`,
     'You must only use facts provided below. Never invent phone numbers, prices, addresses, services, statistics, reviews, or claims that are not explicitly given to you.',
     'If you would need a fact that is not provided, omit it rather than making it up.',
-    rules.voiceDescription ? `Brand voice: ${rules.voiceDescription}` : undefined,
-    rules.tone ? `Tone: ${rules.tone}` : undefined,
-    rules.forbiddenPhrases.length
-      ? `Never use these words/phrases: ${rules.forbiddenPhrases.join(', ')}.`
+    brand?.brandVoice ? `Brand voice: ${brand.brandVoice}` : undefined,
+    brand?.tone ? `Tone: ${brand.tone}` : undefined,
+    brand?.writingStyle ? `Writing style: ${brand.writingStyle}` : undefined,
+    brand?.emojiPolicy ? `Emoji policy: ${brand.emojiPolicy}` : undefined,
+    brand?.capitalizationPreferences ? `Capitalization: ${brand.capitalizationPreferences}` : undefined,
+    brand?.ctaPreferences ? `Call-to-action preference: ${brand.ctaPreferences}` : undefined,
+    brand?.forbiddenPhrases.length
+      ? `Never use these words/phrases: ${brand.forbiddenPhrases.join(', ')}.`
       : undefined,
-    rules.preferredPhrases.length
-      ? `Prefer these phrases where natural: ${rules.preferredPhrases.join(', ')}.`
+    brand?.preferredPhrases.length
+      ? `Prefer these phrases where natural: ${brand.preferredPhrases.join(', ')}.`
       : undefined,
-    rules.styleNotes.length ? `Style notes: ${rules.styleNotes.join(' ')}` : undefined,
+    brand?.otherRules.length ? `Other brand rules: ${brand.otherRules.join(' ')}` : undefined,
     `Format guidance: ${PLATFORM_STYLE_NOTES[platform]}`,
     'Avoid generic AI-sounding filler like "in today\'s fast-paced world" or "look no further". Write like a real local business owner.',
     'Output only the finished content body — no preamble, no explanation, no markdown headers.',
@@ -34,26 +38,45 @@ export function buildContentSystemPrompt(client: ClientProfile, platform: Conten
 }
 
 export function buildContentUserMessage(
-  client: ClientProfile,
+  context: ClientContext,
   platform: ContentPlatform,
   instruction: string,
 ): string {
-  const lines: string[] = [`Instruction: ${instruction}`, '', 'Client facts (use ONLY these; do not invent anything else):', `Company: ${client.companyName}`];
+  const { core, services, serviceAreas, offers, brandProfile } = context;
+  const lines: string[] = [
+    `Instruction: ${instruction}`,
+    '',
+    'Client facts (use ONLY these; do not invent anything else):',
+    `Company: ${core.companyName}`,
+  ];
 
-  if (client.serviceArea.length) lines.push(`Service area: ${client.serviceArea.join('; ')}`);
-  if (client.services.length) {
-    lines.push(`Services: ${client.services.map((s) => (s.description ? `${s.name} - ${s.description}` : s.name)).join('; ')}`);
+  const activeAreas = serviceAreas.filter((a) => a.active);
+  if (activeAreas.length) {
+    lines.push(`Service area: ${activeAreas.map((a) => [a.name, a.city, a.state].filter(Boolean).join(', ')).join('; ')}`);
   }
-  if (client.phone) lines.push(`Phone: ${client.phone}`);
-  if (client.website) lines.push(`Website: ${client.website}`);
-  if (client.offers.length) {
-    lines.push(`Offers: ${client.offers.map((o) => (o.description ? `${o.name} - ${o.description}` : o.name)).join('; ')}`);
+
+  const activeServices = services.filter((s) => s.active);
+  if (activeServices.length) {
+    lines.push(
+      `Services: ${activeServices.map((s) => (s.description ? `${s.serviceName} - ${s.description}` : s.serviceName)).join('; ')}`,
+    );
   }
-  if (client.brandRules.preferredPhrases.length) {
-    lines.push(`Preferred phrases: ${client.brandRules.preferredPhrases.join('; ')}`);
+
+  if (core.phone) lines.push(`Phone: ${core.phone}`);
+  if (core.website) lines.push(`Website: ${core.website}`);
+
+  const activeOffers = offers.filter((o) => o.active);
+  if (activeOffers.length) {
+    lines.push(
+      `Offers: ${activeOffers.map((o) => (o.description ? `${o.offerName} - ${o.description}` : o.offerName)).join('; ')}`,
+    );
   }
-  if (client.brandRules.forbiddenPhrases.length) {
-    lines.push(`Forbidden phrases (never use): ${client.brandRules.forbiddenPhrases.join('; ')}`);
+
+  if (brandProfile?.preferredPhrases.length) {
+    lines.push(`Preferred phrases: ${brandProfile.preferredPhrases.join('; ')}`);
+  }
+  if (brandProfile?.forbiddenPhrases.length) {
+    lines.push(`Forbidden phrases (never use): ${brandProfile.forbiddenPhrases.join('; ')}`);
   }
 
   lines.push('', `Platform: ${platform}`);

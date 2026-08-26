@@ -8,38 +8,52 @@ import { createApp } from '../app.js';
 
 /**
  * End-to-end walkthrough of the MVP demo scenario from the master spec:
- * create a client, ask the orchestrator to create a Facebook post, verify
- * it's routed to the Content Agent with brand context, passes Brand QA, is
- * saved as DRAFT, and can be approved and (mock-)published.
+ * create a client via the knowledge-management API (core record, then
+ * services/service-area/brand-profile as separate calls — reflecting how a
+ * real client actually gets onboarded in Phase 2's normalized model), ask
+ * the orchestrator to create a Facebook post, verify it's routed to the
+ * Content Agent with that knowledge, passes Brand QA, is saved as DRAFT,
+ * and can be approved and (mock-)published.
  */
 describe('CDA Septic Systems demo flow', () => {
   const env = loadEnv();
   const container = buildContainer(env);
   const app = createApp(env, container);
 
-  it('creates a client, generates on-brand content, and drives it through approval to publish', async () => {
+  it('onboards a client through the knowledge API, generates on-brand content, and drives it through approval to publish', async () => {
     const slug = `cda-septic-systems-e2e-${randomUUID()}`;
 
     const createRes = await request(app)
       .post('/clients')
-      .send({
-        slug,
-        companyName: 'CDA Septic Systems',
-        industry: 'Septic & Wastewater Services',
-        serviceArea: ["Coeur d'Alene, ID"],
-        phone: '(208) 555-0142',
-        services: [{ name: 'Septic System Installation', description: 'New and replacement septic installs.' }],
-        brandRules: {
-          voiceDescription: 'Straightforward, trustworthy, locally-rooted.',
-          forbiddenPhrases: ['best in the world', 'guaranteed for life'],
-          preferredPhrases: ['locally owned and operated'],
-          styleNotes: [],
-        },
-      })
+      .send({ slug, companyName: 'CDA Septic Systems', industry: 'Septic & Wastewater Services', phone: '(208) 555-0142' })
       .expect(201);
-
     const client = createRes.body.client;
     expect(client.companyName).toBe('CDA Septic Systems');
+
+    await request(app)
+      .post(`/clients/${slug}/services`)
+      .send({ serviceName: 'Septic System Installation', description: 'New and replacement septic installs.' })
+      .expect(201);
+
+    await request(app)
+      .post(`/clients/${slug}/service-areas`)
+      .send({ name: "Coeur d'Alene", city: "Coeur d'Alene", state: 'ID' })
+      .expect(201);
+
+    await request(app)
+      .put(`/clients/${slug}/brand-profile`)
+      .send({
+        brandVoice: 'Straightforward, trustworthy, locally-rooted.',
+        forbiddenPhrases: ['best in the world', 'guaranteed for life'],
+        preferredPhrases: ['locally owned and operated'],
+      })
+      .expect(200);
+
+    // The knowledge-retrieval endpoint reflects everything just added.
+    const contextRes = await request(app).get(`/clients/${slug}/context`).expect(200);
+    expect(contextRes.body.context.services).toHaveLength(1);
+    expect(contextRes.body.context.serviceAreas).toHaveLength(1);
+    expect(contextRes.body.context.brandProfile.brandVoice).toBe('Straightforward, trustworthy, locally-rooted.');
 
     const orchestratorRes = await request(app)
       .post('/orchestrator/requests')
@@ -52,6 +66,7 @@ describe('CDA Septic Systems demo flow', () => {
     expect(result.skillName).toBe('create-social-post');
     expect(result.result.qa.passed).toBe(true);
     expect(result.result.contentItem.status).toBe('DRAFT');
+    expect(result.result.contentItem.platform).toBe('facebook');
     expect(result.result.contentItem.body.length).toBeGreaterThan(0);
     // Never invents a phone number that isn't the client's.
     expect(result.result.contentItem.body).not.toMatch(/\(555\)\s?123/);
@@ -78,9 +93,8 @@ describe('CDA Septic Systems demo flow', () => {
     expect(publishRes.body.contentItem.status).toBe('PUBLISHED');
     expect(publishRes.body.contentItem.externalId).toMatch(/^mock-facebook-/);
 
-    // Cleanup
-    await prisma.contentItem.deleteMany({ where: { clientId: client.id } });
-    await prisma.auditLog.deleteMany({ where: { clientId: client.id } });
+    // Cleanup — client delete cascades to services/service-areas/brand
+    // profile/content items at the DB level.
     await prisma.client.delete({ where: { id: client.id } });
   });
 

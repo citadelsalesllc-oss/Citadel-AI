@@ -25,20 +25,23 @@ describe('checkForbiddenPhrases', () => {
 
 describe('checkInventedPhoneNumbers', () => {
   it('allows the client\'s real phone number', () => {
-    const client = makeTestClient({ phone: '(208) 555-0142' });
+    const client = makeTestClient();
+    client.core.phone = '(208) 555-0142';
     const issues = checkInventedPhoneNumbers('Call us at (208) 555-0142 today.', client);
     expect(issues).toHaveLength(0);
   });
 
   it('flags a phone number that does not match the client profile', () => {
-    const client = makeTestClient({ phone: '(208) 555-0142' });
+    const client = makeTestClient();
+    client.core.phone = '(208) 555-0142';
     const issues = checkInventedPhoneNumbers('Call us at (555) 123-9999 today.', client);
     expect(issues).toHaveLength(1);
     expect(issues[0]?.code).toBe('INVENTED_PHONE_NUMBER');
   });
 
   it('flags any phone number when the client has none on file', () => {
-    const client = makeTestClient({ phone: undefined });
+    const client = makeTestClient();
+    client.core.phone = null;
     const issues = checkInventedPhoneNumbers('Call us at (555) 123-9999 today.', client);
     expect(issues).toHaveLength(1);
   });
@@ -53,9 +56,22 @@ describe('checkInventedPrices', () => {
   });
 
   it('allows a price that is present in the client profile', () => {
-    const client = makeTestClient({
-      offers: [{ name: 'Special', description: 'Only $99 this month' }],
-    });
+    const client = makeTestClient();
+    client.offers = [
+      {
+        id: 'offer_special',
+        clientId: client.core.id,
+        offerName: 'Special',
+        description: 'Only $99 this month',
+        cta: null,
+        restrictions: null,
+        active: true,
+        startDate: null,
+        endDate: null,
+        createdAt: client.core.createdAt,
+        updatedAt: client.core.updatedAt,
+      },
+    ];
     const issues = checkInventedPrices('Get our special for $99 this month!', client);
     expect(issues).toHaveLength(0);
   });

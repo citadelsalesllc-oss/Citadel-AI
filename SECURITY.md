@@ -6,7 +6,16 @@ All secrets (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `FACEBOOK_PAGE_ACCESS_TOKEN`, 
 
 ## Tenant isolation
 
-Every content item and audit log row carries a `clientId` foreign key (`database/prisma/schema.prisma`). Tools that touch client-scoped data always require an explicit client identifier — there is no ambient "current client" that could leak between concurrent requests. Agents receive a `ClientProfile` scoped to exactly the client the request is for, via `AgentContext.client`, and generation prompts (`agents/src/content/prompt.ts`) are built solely from that one client's data.
+Every client-scoped table — `Service`, `ServiceArea`, `BrandProfile`, `TargetAudience`, `SeoProfile`, `Offer`, `Faq`, `MarketingNote`, `ContentItem`, `AuditLog` (`database/prisma/schema.prisma`) — carries a `clientId` foreign key. Two enforcement layers, not one:
+
+1. **Every repository read/write for a specific child record filters by `(id, clientId)` together**, not just `id` (`database/src/repositories/service-repository.ts` is the canonical pattern). A valid record id belonging to a *different* client raises `ResourceNotFoundError` — deliberately the same error as an id that doesn't exist, so a caller can never distinguish "wrong id" from "someone else's record," which would itself be a cross-tenant information leak.
+2. **API routes never accept a caller-supplied `clientId` for a write.** Every knowledge route resolves the client from the URL's `:idOrSlug` first (`clientRepository.requireByIdOrSlug`, 404 if unknown) and passes *that* resolved id into the repository call — a cross-tenant write has no code path to reach, it isn't merely checked and rejected.
+
+`database/src/__tests__/tenant-isolation.test.ts` and `apps/api/src/__tests__/client-knowledge-api.test.ts` prove this: Client A's records never appear in Client B's lists or `getClientContext` result, and Client B cannot modify Client A's record even by supplying A's real record id.
+
+Agents receive the full `ClientContext` scoped to exactly the client the request is for, via `AgentContext.client`, and generation prompts (`agents/src/content/prompt.ts`) are built solely from that one client's data.
+
+**Known gap, not yet closed:** the Phase 1 content-lifecycle tools (`approval_request`, `content_approve`, `content_reject`, `content_request_revision`, `publish_content`) look up a `ContentItem` by id only (`contentRepository.findById`), without also checking which client it belongs to. In practice every caller today reaches these through routes/skills that already resolved the right client, so this isn't currently exploitable through the built UI/API surface — but it means a caller who already knows another client's content-item id could, in principle, act on it directly against `/content/:id/...`. Closing this (threading `clientId` through those tools' input and re-checking ownership, the same pattern used everywhere else in this document) is flagged as follow-up work rather than fixed in Phase 2, since it's outside this phase's scope (the new knowledge tables) — see the Phase 2 completion report for tracking.
 
 ## Authentication & authorization
 

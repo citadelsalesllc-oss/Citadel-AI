@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { clientRepository, prisma } from '@citadel/database';
-import type { ClientProfile } from '@citadel/shared';
+import type { ClientRecord } from '@citadel/shared';
 import { MockPublishAdapter } from '@citadel/integrations/social';
 import { contentSaveTool } from '../content-tools.js';
 import { approvalRequestTool, contentApproveTool, contentRejectTool } from '../approval-tools.js';
@@ -10,7 +10,7 @@ import { createPublishContentTool } from '../publish-tools.js';
 const actorContext = { actor: { id: 'test', label: 'Test Actor' }, requestId: 'req-test' };
 
 describe('content lifecycle (integration)', () => {
-  let client: ClientProfile;
+  let client: ClientRecord;
 
   beforeAll(async () => {
     client = await clientRepository.create({
@@ -27,7 +27,7 @@ describe('content lifecycle (integration)', () => {
 
   it('walks DRAFT -> REVIEW -> APPROVED -> PUBLISHED', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Hello world', metadata: {} },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Hello world', metadata: {}, tags: [] },
       { ...actorContext, clientId: client.id },
     );
     expect(draft.status).toBe('DRAFT');
@@ -50,7 +50,7 @@ describe('content lifecycle (integration)', () => {
 
   it('rejects publishing content that has not been approved', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Not approved yet', metadata: {} },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Not approved yet', metadata: {}, tags: [] },
       { ...actorContext, clientId: client.id },
     );
 
@@ -62,7 +62,7 @@ describe('content lifecycle (integration)', () => {
 
   it('supports rejecting content in review', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Needs review', metadata: {} },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Needs review', metadata: {}, tags: [] },
       { ...actorContext, clientId: client.id },
     );
     await approvalRequestTool.execute({ contentId: draft.id }, actorContext);

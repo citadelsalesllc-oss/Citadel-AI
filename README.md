@@ -6,12 +6,14 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the system is put together, [AG
 
 ## Status
 
-This is an MVP. One complete, tested, end-to-end workflow exists today:
+**Phase 1 (MVP):** one complete, tested, end-to-end workflow:
 
 > **Client:** CDA Septic Systems
 > **Request:** "Create a Facebook post about a septic installation."
 >
-> The Orchestrator identifies the client, loads its brand rules and services, routes the request to the **Content Agent**, runs the result through **Brand QA**, and saves it as a `DRAFT` — ready for human approval before anything is published.
+> The Orchestrator identifies the client, loads its knowledge (services, brand profile), routes the request to the **Content Agent**, runs the result through **Brand QA**, and saves it as a `DRAFT` — ready for human approval before anything is published.
+
+**Phase 2 (client knowledge system):** the client memory model was rebuilt from Phase 1's JSON-blob fields into a normalized Postgres schema — `Client` core record plus `Service`, `ServiceArea`, `BrandProfile`, `TargetAudience`, `SeoProfile`, `Offer`, `Faq`, `MarketingNote`, and extended `ContentItem` (platform/title/campaign/tags) tables — with a dedicated knowledge-retrieval service (`getClientContext`) and full CRUD API for populating it. Tenant isolation is enforced at both the repository and API layer and has automated proof (see [ARCHITECTURE.md](./ARCHITECTURE.md#client-memory-system)). Seed data now contains only facts actually given (just `companyName` for the demo client) — never invented business facts, matching the same rule already enforced on generated content.
 
 Strategy, SEO, Review, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
 
@@ -28,6 +30,16 @@ cp .env.example .env            # edit DATABASE_URL if needed; MODEL_PROVIDER=mo
 pnpm db:migrate                 # applies the Prisma schema
 pnpm db:seed                    # seeds the CDA Septic Systems demo client
 pnpm dev:api                    # starts the API on http://localhost:3000
+```
+
+Populate some real knowledge for the seeded client (seed data intentionally contains only its name — see ARCHITECTURE.md):
+
+```bash
+curl -X POST http://localhost:3000/clients/cda-septic-systems/services \
+  -H 'Content-Type: application/json' -d '{"serviceName":"Septic Tank Pumping","description":"Routine and emergency pumping."}'
+curl -X PUT http://localhost:3000/clients/cda-septic-systems/brand-profile \
+  -H 'Content-Type: application/json' -d '{"brandVoice":"Straightforward, trustworthy, locally-rooted.","forbiddenPhrases":["best in the world"]}'
+curl http://localhost:3000/clients/cda-septic-systems/context   # everything an agent would see, in one call
 ```
 
 In another terminal, run the demo request:
@@ -75,8 +87,8 @@ ANTHROPIC_MODEL=claude-sonnet-5
 ## Project layout
 
 ```
-shared/          Core types & interfaces (Tool, Agent, Skill, ModelProvider, Client/Content schemas)
-database/        Prisma schema, migrations, repositories, seed script
+shared/          Core types & interfaces (Tool, Agent, Skill, ModelProvider, client knowledge & Content schemas)
+database/        Prisma schema, migrations, repositories, getClientContext, seed script
 integrations/    Concrete adapters: models (Anthropic/mock), social publishing, website fetch, Google, OpenClaw
 tools/           The tool abstraction layer agents call instead of hallucinating
 agents/          Orchestrator + specialist agents (Content, Brand QA implemented; others are stubs)

@@ -34,7 +34,14 @@ export const ContentItemSchema = z.object({
   clientId: z.string(),
   type: ContentTypeSchema,
   status: ContentStatusSchema,
+  // Distinct from `type`: type is the kind of content, platform is where
+  // it's headed (facebook/instagram/google_business/...), null for
+  // platform-agnostic content.
+  platform: z.string().nullable().default(null),
+  title: z.string().nullable().default(null),
   body: z.string(),
+  campaign: z.string().nullable().default(null),
+  tags: z.array(z.string()).default([]),
   metadata: z.record(z.unknown()).default({}),
   createdBy: z.string(),
   reviewer: z.string().nullable().default(null),
@@ -50,7 +57,11 @@ export type ContentItem = z.infer<typeof ContentItemSchema>;
 export const CreateContentItemInputSchema = z.object({
   clientId: z.string(),
   type: ContentTypeSchema,
+  platform: z.string().optional(),
+  title: z.string().optional(),
   body: z.string().min(1),
+  campaign: z.string().optional(),
+  tags: z.array(z.string()).default([]),
   metadata: z.record(z.unknown()).default({}),
   createdBy: z.string().min(1),
 });

@@ -5,21 +5,29 @@ import { ContentTypeSchema, type ContentItem, type Tool, type ToolContext } from
 const ContentSaveInputSchema = z.object({
   clientId: z.string().min(1),
   type: ContentTypeSchema,
+  platform: z.string().optional(),
+  title: z.string().optional(),
   body: z.string().min(1),
+  campaign: z.string().optional(),
+  tags: z.array(z.string()).default([]),
   metadata: z.record(z.unknown()).default({}),
 });
 type ContentSaveInput = z.infer<typeof ContentSaveInputSchema>;
 
-/** Persists generated content as a new DRAFT. Never marks content as published. */
+/** Persists generated (or manually authored) content as a new DRAFT. Never marks content as published. */
 export const contentSaveTool: Tool<ContentSaveInput, ContentItem> = {
   name: 'content_save',
-  description: 'Save generated content as a new DRAFT content item for a client.',
+  description: 'Save content as a new DRAFT content item for a client. This phase only stores content — no publishing.',
   inputSchema: ContentSaveInputSchema,
   async execute(input, context: ToolContext) {
     const item = await contentRepository.create({
       clientId: input.clientId,
       type: input.type,
+      platform: input.platform,
+      title: input.title,
       body: input.body,
+      campaign: input.campaign,
+      tags: input.tags,
       metadata: input.metadata,
       createdBy: context.actor.label,
     });
@@ -29,7 +37,7 @@ export const contentSaveTool: Tool<ContentSaveInput, ContentItem> = {
       action: 'content_save',
       targetType: 'ContentItem',
       targetId: item.id,
-      metadata: { type: input.type, status: item.status },
+      metadata: { type: input.type, platform: input.platform, status: item.status },
     });
     return item;
   },

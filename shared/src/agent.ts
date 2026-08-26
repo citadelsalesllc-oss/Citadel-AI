@@ -1,8 +1,9 @@
-import type { ClientProfile } from './types/client.js';
+import type { ClientContext } from './types/client.js';
 import type { RequestActor } from './tool.js';
 
 export interface AgentContext {
-  client: ClientProfile;
+  /** The full aggregated client knowledge — see ClientContext for shape. */
+  client: ClientContext;
   actor: RequestActor;
   requestId: string;
 }

@@ -4,7 +4,8 @@ Tools are the only way agents touch real data or external systems — they never
 
 | Tool | Backing | Status |
 | --- | --- | --- |
-| `client_lookup` | Postgres (`clientRepository`) | Real |
+| `client_lookup` | Postgres (`clientRepository`) — core record only | Real |
+| `client_context` | Postgres (`getClientContext`) — full aggregated knowledge, see ARCHITECTURE.md | Real |
 | `client_update` | Postgres, audit-logged | Real |
 | `content_save` | Postgres, creates `DRAFT`, audit-logged | Real |
 | `content_search` | Postgres | Real |
@@ -26,6 +27,10 @@ Tools are the only way agents touch real data or external systems — they never
 `publish_content` uses whichever `PublishAdapter` `apps/api/src/container.ts` builds from `PUBLISH_PROVIDER`:
 - `mock` (default) — `MockPublishAdapter` (`integrations/src/social/mock-publish-adapter.ts`) always "succeeds," returns a `mock-<platform>-<uuid>` external ID, and tags the result `isMock: true`. It never contacts a real API.
 - `facebook` — `FacebookAdapter` (`integrations/src/social/facebook-adapter.ts`) is a real seam that currently always throws `NotConfiguredError` (real Graph API publishing is future work per the master spec — see "ENGINEERING RULE: Do not fake integrations").
+
+## Knowledge management is API routes, not agent tools
+
+Adding/updating services, service areas, brand profile, SEO profile, target audience, offers, FAQs, and marketing notes (Phase 2) are deliberately plain Express routes calling `@citadel/database` repositories directly (`apps/api/src/routes/clients.ts`) — **not** registered as agent-callable `Tool`s. These are Citadel-staff data-entry operations, not something an AI agent decides to do on its own; making them agent tools would be scope beyond what's needed ("do not build a generic CRM," "do not create unnecessary endpoints"). If a future agent needs to *write* knowledge autonomously (e.g., a client-onboarding agent extracting facts from a discovery call), wrap the relevant repository call in a proper `Tool` at that point — don't pre-build the capability speculatively.
 
 ## Adding a tool
 
