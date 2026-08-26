@@ -98,6 +98,43 @@ describe('tenant isolation', () => {
     expect(bContent.some((c) => c.body === "A's private draft")).toBe(false);
   });
 
+  it("Client B cannot READ Client A's content item by supplying A's real content id", async () => {
+    const contentA = await contentRepository.create({
+      clientId: clientA.id,
+      type: 'SOCIAL_POST',
+      body: "A's confidential draft",
+      metadata: {},
+      tags: [],
+      createdBy: 'test',
+    });
+
+    await expect(contentRepository.requireByIdForClient(clientB.id, contentA.id)).rejects.toThrow(
+      ResourceNotFoundError,
+    );
+    // The owning client can still read it — this isn't broken by the fix.
+    const readByOwner = await contentRepository.requireByIdForClient(clientA.id, contentA.id);
+    expect(readByOwner.id).toBe(contentA.id);
+  });
+
+  it("Client B cannot WRITE (transition) Client A's content item by supplying A's real content id", async () => {
+    const contentA = await contentRepository.create({
+      clientId: clientA.id,
+      type: 'SOCIAL_POST',
+      body: "A's draft to be hijacked",
+      metadata: {},
+      tags: [],
+      createdBy: 'test',
+    });
+
+    await expect(contentRepository.transition(clientB.id, contentA.id, 'REVIEW')).rejects.toThrow(
+      ResourceNotFoundError,
+    );
+
+    // The record's status is untouched — the rejected write had no effect.
+    const stillOwnedByA = await contentRepository.requireByIdForClient(clientA.id, contentA.id);
+    expect(stillOwnedByA.status).toBe('DRAFT');
+  });
+
   it("getClientContext(A) never contains any of Client B's data, and vice versa", async () => {
     await serviceRepository.add(clientA.id, { serviceName: 'A-context-service' });
     await serviceRepository.add(clientB.id, { serviceName: 'B-context-service' });

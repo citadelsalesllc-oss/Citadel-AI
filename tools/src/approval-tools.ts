@@ -1,16 +1,31 @@
 import { z } from 'zod';
-import { contentRepository, auditRepository } from '@citadel/database';
+import { clientRepository, contentRepository, auditRepository } from '@citadel/database';
 import { type ContentItem, type Tool, type ToolContext } from '@citadel/shared';
 
-const ContentIdInputSchema = z.object({ contentId: z.string().min(1) });
+/**
+ * Every content-lifecycle tool below requires `clientIdOrSlug` — the
+ * "authorized client/context" this action is being performed on behalf
+ * of — and resolves it to a real client id BEFORE touching the content
+ * item. contentRepository.transition() then scopes its lookup by
+ * (contentId, clientId) together, so a contentId that's valid but
+ * belongs to a different client fails with the same ResourceNotFoundError
+ * as an unknown id — it can never be approved, rejected, or modified
+ * through another client's context. See database/src/repositories/
+ * content-repository.ts and database/src/__tests__/tenant-isolation.test.ts.
+ */
+const ContentIdInputSchema = z.object({
+  clientIdOrSlug: z.string().min(1),
+  contentId: z.string().min(1),
+});
 
 /** Submits a DRAFT (or REVISION_REQUIRED) content item for human review. */
 export const approvalRequestTool: Tool<z.infer<typeof ContentIdInputSchema>, ContentItem> = {
   name: 'approval_request',
-  description: 'Submit a draft content item for human review before it can be approved or published.',
+  description: "Submit a client's draft content item for human review before it can be approved or published.",
   inputSchema: ContentIdInputSchema,
   async execute(input, context: ToolContext) {
-    const item = await contentRepository.transition(input.contentId, 'REVIEW');
+    const client = await clientRepository.requireByIdOrSlug(input.clientIdOrSlug);
+    const item = await contentRepository.transition(client.id, input.contentId, 'REVIEW');
     await auditRepository.record({
       clientId: item.clientId,
       actor: context.actor.label,
@@ -23,15 +38,20 @@ export const approvalRequestTool: Tool<z.infer<typeof ContentIdInputSchema>, Con
   },
 };
 
-const ApproveInputSchema = z.object({ contentId: z.string().min(1), reviewer: z.string().min(1) });
+const ApproveInputSchema = z.object({
+  clientIdOrSlug: z.string().min(1),
+  contentId: z.string().min(1),
+  reviewer: z.string().min(1),
+});
 
 /** Human approval gate. Only APPROVED content may ever be published. */
 export const contentApproveTool: Tool<z.infer<typeof ApproveInputSchema>, ContentItem> = {
   name: 'content_approve',
-  description: 'Approve a content item that is in REVIEW. Required before publishing.',
+  description: "Approve a client's content item that is in REVIEW. Required before publishing.",
   inputSchema: ApproveInputSchema,
   async execute(input, context: ToolContext) {
-    const item = await contentRepository.transition(input.contentId, 'APPROVED', {
+    const client = await clientRepository.requireByIdOrSlug(input.clientIdOrSlug);
+    const item = await contentRepository.transition(client.id, input.contentId, 'APPROVED', {
       reviewer: input.reviewer,
       approvedAt: new Date(),
     });
@@ -48,6 +68,7 @@ export const contentApproveTool: Tool<z.infer<typeof ApproveInputSchema>, Conten
 };
 
 const RejectInputSchema = z.object({
+  clientIdOrSlug: z.string().min(1),
   contentId: z.string().min(1),
   reviewer: z.string().min(1),
   reason: z.string().min(1),
@@ -55,10 +76,11 @@ const RejectInputSchema = z.object({
 
 export const contentRejectTool: Tool<z.infer<typeof RejectInputSchema>, ContentItem> = {
   name: 'content_reject',
-  description: 'Reject a content item that is in REVIEW, ending its lifecycle.',
+  description: "Reject a client's content item that is in REVIEW, ending its lifecycle.",
   inputSchema: RejectInputSchema,
   async execute(input, context: ToolContext) {
-    const item = await contentRepository.transition(input.contentId, 'REJECTED', {
+    const client = await clientRepository.requireByIdOrSlug(input.clientIdOrSlug);
+    const item = await contentRepository.transition(client.id, input.contentId, 'REJECTED', {
       reviewer: input.reviewer,
       rejectionReason: input.reason,
     });
@@ -76,10 +98,11 @@ export const contentRejectTool: Tool<z.infer<typeof RejectInputSchema>, ContentI
 
 export const contentRequestRevisionTool: Tool<z.infer<typeof RejectInputSchema>, ContentItem> = {
   name: 'content_request_revision',
-  description: 'Send a content item that is in REVIEW back for revision, with feedback.',
+  description: "Send a client's content item that is in REVIEW back for revision, with feedback.",
   inputSchema: RejectInputSchema,
   async execute(input, context: ToolContext) {
-    const item = await contentRepository.transition(input.contentId, 'REVISION_REQUIRED', {
+    const client = await clientRepository.requireByIdOrSlug(input.clientIdOrSlug);
+    const item = await contentRepository.transition(client.id, input.contentId, 'REVISION_REQUIRED', {
       reviewer: input.reviewer,
       rejectionReason: input.reason,
     });

@@ -32,18 +32,24 @@ describe('content lifecycle (integration)', () => {
     );
     expect(draft.status).toBe('DRAFT');
 
-    const inReview = await approvalRequestTool.execute({ contentId: draft.id }, actorContext);
+    const inReview = await approvalRequestTool.execute(
+      { clientIdOrSlug: client.id, contentId: draft.id },
+      actorContext,
+    );
     expect(inReview.status).toBe('REVIEW');
 
     const approved = await contentApproveTool.execute(
-      { contentId: draft.id, reviewer: 'Jane Reviewer' },
+      { clientIdOrSlug: client.id, contentId: draft.id, reviewer: 'Jane Reviewer' },
       actorContext,
     );
     expect(approved.status).toBe('APPROVED');
     expect(approved.reviewer).toBe('Jane Reviewer');
 
     const publishTool = createPublishContentTool(new MockPublishAdapter());
-    const published = await publishTool.execute({ contentId: draft.id, platform: 'facebook' }, actorContext);
+    const published = await publishTool.execute(
+      { clientIdOrSlug: client.id, contentId: draft.id, platform: 'facebook' },
+      actorContext,
+    );
     expect(published.status).toBe('PUBLISHED');
     expect(published.externalId).toMatch(/^mock-facebook-/);
   });
@@ -55,9 +61,9 @@ describe('content lifecycle (integration)', () => {
     );
 
     const publishTool = createPublishContentTool(new MockPublishAdapter());
-    await expect(publishTool.execute({ contentId: draft.id, platform: 'facebook' }, actorContext)).rejects.toThrow(
-      /Cannot transition content from DRAFT to PUBLISHED/,
-    );
+    await expect(
+      publishTool.execute({ clientIdOrSlug: client.id, contentId: draft.id, platform: 'facebook' }, actorContext),
+    ).rejects.toThrow(/Cannot transition content from DRAFT to PUBLISHED/);
   });
 
   it('supports rejecting content in review', async () => {
@@ -65,9 +71,9 @@ describe('content lifecycle (integration)', () => {
       { clientId: client.id, type: 'SOCIAL_POST', body: 'Needs review', metadata: {}, tags: [] },
       { ...actorContext, clientId: client.id },
     );
-    await approvalRequestTool.execute({ contentId: draft.id }, actorContext);
+    await approvalRequestTool.execute({ clientIdOrSlug: client.id, contentId: draft.id }, actorContext);
     const rejected = await contentRejectTool.execute(
-      { contentId: draft.id, reviewer: 'Jane Reviewer', reason: 'Off-brand tone' },
+      { clientIdOrSlug: client.id, contentId: draft.id, reviewer: 'Jane Reviewer', reason: 'Off-brand tone' },
       actorContext,
     );
     expect(rejected.status).toBe('REJECTED');

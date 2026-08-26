@@ -55,9 +55,12 @@ Then walk it through approval:
 
 ```bash
 CONTENT_ID=<id from the response above>
-curl -X POST http://localhost:3000/content/$CONTENT_ID/submit-for-review
-curl -X POST http://localhost:3000/content/$CONTENT_ID/approve -H 'Content-Type: application/json' -d '{"reviewer":"Your Name"}'
-curl -X POST http://localhost:3000/content/$CONTENT_ID/publish -H 'Content-Type: application/json' -d '{"platform":"facebook"}'
+# clientIdOrSlug is required on every content-lifecycle call — see SECURITY.md
+# "Tenant isolation": it's how the API knows which client authorizes this
+# action, so content can never be approved/published through the wrong client.
+curl -X POST http://localhost:3000/content/$CONTENT_ID/submit-for-review -H 'Content-Type: application/json' -d '{"clientIdOrSlug":"cda-septic-systems"}'
+curl -X POST http://localhost:3000/content/$CONTENT_ID/approve -H 'Content-Type: application/json' -d '{"clientIdOrSlug":"cda-septic-systems","reviewer":"Your Name"}'
+curl -X POST http://localhost:3000/content/$CONTENT_ID/publish -H 'Content-Type: application/json' -d '{"clientIdOrSlug":"cda-septic-systems","platform":"facebook"}'
 ```
 
 `PUBLISH_PROVIDER` defaults to `mock` — no real social account is ever contacted until a real adapter is configured (see [TOOLS.md](./TOOLS.md)).

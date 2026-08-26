@@ -73,13 +73,17 @@ describe('CDA Septic Systems demo flow', () => {
 
     const contentId = result.result.contentItem.id;
 
-    await request(app).post(`/content/${contentId}/submit-for-review`).expect(200).expect((res) => {
-      expect(res.body.contentItem.status).toBe('REVIEW');
-    });
+    await request(app)
+      .post(`/content/${contentId}/submit-for-review`)
+      .send({ clientIdOrSlug: slug })
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.contentItem.status).toBe('REVIEW');
+      });
 
     await request(app)
       .post(`/content/${contentId}/approve`)
-      .send({ reviewer: 'Marketing Manager' })
+      .send({ clientIdOrSlug: slug, reviewer: 'Marketing Manager' })
       .expect(200)
       .expect((res) => {
         expect(res.body.contentItem.status).toBe('APPROVED');
@@ -87,7 +91,7 @@ describe('CDA Septic Systems demo flow', () => {
 
     const publishRes = await request(app)
       .post(`/content/${contentId}/publish`)
-      .send({ platform: 'facebook' })
+      .send({ clientIdOrSlug: slug, platform: 'facebook' })
       .expect(200);
 
     expect(publishRes.body.contentItem.status).toBe('PUBLISHED');

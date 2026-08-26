@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { contentRepository, auditRepository } from '@citadel/database';
+import { clientRepository, contentRepository, auditRepository } from '@citadel/database';
 import { InvalidLifecycleTransitionError, type ContentItem, type Tool, type ToolContext } from '@citadel/shared';
 import type { PublishAdapter, SocialPlatform } from '@citadel/integrations/social';
 
 const PublishInputSchema = z.object({
+  clientIdOrSlug: z.string().min(1),
   contentId: z.string().min(1),
   platform: z.enum(['facebook', 'instagram', 'google_business']),
 });
@@ -14,18 +15,20 @@ type PublishInput = z.infer<typeof PublishInputSchema>;
  * default — see integrations/social). Publishing is only reachable from
  * APPROVED status; the repository's lifecycle guard enforces this
  * independently of the adapter, so this tool can never mark content
- * published without a prior human approval.
+ * published without a prior human approval. `clientIdOrSlug` is the
+ * authorized client/context this publish is happening on behalf of —
+ * resolved to a real client id and used to scope every lookup, so content
+ * belonging to a different client can never be published through this
+ * client's context (see database/src/repositories/content-repository.ts).
  */
 export function createPublishContentTool(adapter: PublishAdapter): Tool<PublishInput, ContentItem> {
   return {
     name: 'publish_content',
-    description: 'Publish an APPROVED content item to an external channel. Requires prior approval.',
+    description: "Publish a client's APPROVED content item to an external channel. Requires prior approval.",
     inputSchema: PublishInputSchema,
     async execute(input, context: ToolContext) {
-      const existing = await contentRepository.findById(input.contentId);
-      if (!existing) {
-        throw new Error(`Content item not found: ${input.contentId}`);
-      }
+      const client = await clientRepository.requireByIdOrSlug(input.clientIdOrSlug);
+      const existing = await contentRepository.requireByIdForClient(client.id, input.contentId);
       if (existing.status !== 'APPROVED') {
         // Fail fast on the lifecycle guard before calling the adapter, so a
         // not-yet-approved item never gets marked FAILED (that transition is
@@ -41,7 +44,7 @@ export function createPublishContentTool(adapter: PublishAdapter): Tool<PublishI
           metadata: existing.metadata,
         });
 
-        const item = await contentRepository.transition(input.contentId, 'PUBLISHED', {
+        const item = await contentRepository.transition(client.id, input.contentId, 'PUBLISHED', {
           publishedAt: result.publishedAt,
           externalId: result.externalId,
           metadata: { ...existing.metadata, publish: { provider: result.provider, isMock: result.isMock } },
@@ -63,7 +66,7 @@ export function createPublishContentTool(adapter: PublishAdapter): Tool<PublishI
           // publish failure — don't move the lifecycle to FAILED for it.
           throw error;
         }
-        const failed = await contentRepository.transition(input.contentId, 'FAILED', {
+        const failed = await contentRepository.transition(client.id, input.contentId, 'FAILED', {
           metadata: { ...existing.metadata, publishError: String(error) },
         });
         await auditRepository.record({
