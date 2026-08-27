@@ -63,6 +63,7 @@ model Client {
   marketingNotes  MarketingNote[]
   contentItems    ContentItem[]
   seoAudits       SeoAudit[]
+  reviews         Review[]
   auditLogs       AuditLog[]
 
   createdAt DateTime @default(now())
@@ -304,6 +305,83 @@ model SeoAudit {
 
   @@index([clientId, url, createdAt])
   @@map("seo_audits")
+}
+
+enum ReviewSource {
+  GOOGLE_BUSINESS
+  MOCK
+  MANUAL
+
+  @@map("review_source")
+}
+
+enum ReviewResponseStatus {
+  UNRESPONDED
+  DRAFT
+  APPROVED
+  PUBLISHED
+  REJECTED
+  REVISION_REQUIRED
+
+  @@map("review_response_status")
+}
+
+/// A customer review ingested from a ReviewProvider (Phase 5) — mock/manual
+/// today, Google Business Profile later (see ARCHITECTURE.md "Review
+/// Intelligence pipeline"). Deliberately minimal PII: reviewerName is the
+/// only personal field, and only when the source actually provides one.
+model Review {
+  id       String       @id @default(cuid())
+  client   Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  // The provider's own id for this review, plus which provider it came
+  // from — together they're how review_sync stays idempotent (re-syncing
+  // never creates duplicates) and how a future real provider slots in
+  // without changing this schema.
+  externalId String
+  source     ReviewSource
+
+  reviewerName String?
+  rating       Int
+  reviewText   String
+  reviewDate   DateTime
+
+  responseStatus ReviewResponseStatus @default(UNRESPONDED)
+  // Current response only — every generated/revised draft is additionally
+  // appended to `versions` below, so history is never overwritten.
+  responseText   String?
+  responseDate   DateTime?
+
+  versions ReviewResponseVersion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, source, externalId])
+  @@index([clientId, responseStatus])
+  @@map("reviews")
+}
+
+/// Append-only history of every response draft generated for a review —
+/// "do not overwrite historical versions" as a real, queryable guarantee
+/// rather than just an AuditLog metadata trail (which also still records
+/// each save as an event, see AuditLog below).
+model ReviewResponseVersion {
+  id       String @id @default(cuid())
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId String
+
+  responseText String
+  tone         String?
+  cta          String?
+  qaPassed     Boolean
+  qaIssues     Json    @default("[]")
+  createdBy    String
+
+  createdAt DateTime @default(now())
+
+  @@index([reviewId, createdAt])
+  @@map("review_response_versions")
 }
 
 model AuditLog {

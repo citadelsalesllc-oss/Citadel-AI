@@ -19,7 +19,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the system is put together, [AG
 
 **Phase 4 (SEO Intelligence Agent):** the second complete specialist — the SEO Agent audits a client's webpage via `POST /clients/:clientId/ai/seo-audit`, combining a real website fetch (`WebsiteFetchAdapter`, incl. robots.txt/sitemap.xml) and four deterministic check categories (technical, on-page, local SEO, conversion — `agents/src/seo/checks.ts`) with LLM-prioritized, client-friendly recommendations. Every recommendation must cite real evidence from the deterministic findings; one that cites an id the engine never produced is dropped rather than trusted. Audits are persisted (`SeoAudit`) so a client's SEO can be tracked over time, and both structured entry points (`generateContent`/`runSeoAudit`) now resolve their skill through one shared `task -> skill` lookup. See [ARCHITECTURE.md](./ARCHITECTURE.md#seo-analysis-pipeline-phase-4).
 
-Strategy, Review, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
+**Phase 5 (Review Intelligence Agent):** the third and fourth specialists — `ReviewAnalysisAgent` (deterministic, no model call) and `ReviewResponseAgent` (drafts a reply, grounded in the same analysis) — via `POST /clients/:clientId/ai/reviews/:reviewId/analyze` and `.../respond`. Reviews are ingested through a swappable `ReviewProvider` (mock fixtures today; a real Google Business Profile adapter is a documented future seam, never faked) into a persisted `Review` table, then analyzed for sentiment, service/location mentions, and — via a structured keyword-category match — potential escalation (legal threats, safety/injury/fraud/discrimination allegations, direct threats). Response drafts reuse the exact same `BrandQaAgent` every other generated artifact passes through, and every draft appends to an append-only `ReviewResponseVersion` history rather than overwriting the last one. Escalation is surfaced as a flag for a human reviewer, never a trigger for a different code path — every response, escalation or not, is saved as `DRAFT`/`REVISION_REQUIRED` and never auto-published. See [ARCHITECTURE.md](./ARCHITECTURE.md#review-intelligence-pipeline-phase-5).
+
+Strategy, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
 
 ## Prerequisites
 
@@ -89,6 +91,20 @@ curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/seo-audit \
 
 Returns `{ audit, evidence, recommendations, clientId, auditId, agentUsed, modelProvider, usage, executionTimeMs }` — `audit` contains `overall_score` plus `technical`/`on_page`/`local_seo`/`conversion` scorecards. Past audits for a client are listable via `GET /clients/cda-septic-systems/seo-audits` (optionally `?url=...`), newest first, for before/after comparison (see [ARCHITECTURE.md](./ARCHITECTURE.md#seo-analysis-pipeline-phase-4)).
 
+### Or analyze and respond to a customer review (Phase 5)
+
+```bash
+# Sync mock fixture reviews for the demo client first (see ARCHITECTURE.md "Mock review data"):
+curl -X POST http://localhost:3000/clients/cda-septic-systems/reviews/sync
+curl http://localhost:3000/clients/cda-septic-systems/reviews   # list synced reviews to get a reviewId
+
+REVIEW_ID=<id from the list above>
+curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/reviews/$REVIEW_ID/analyze
+curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/reviews/$REVIEW_ID/respond
+```
+
+`analyze` returns `{ analysis: { rating, classification, positive_points, negative_points, mentioned_services, mentioned_locations, concerns, escalation_needed, evidence }, reviewId, clientId, agentUsed }` — fully deterministic, no model call. `respond` returns `{ response, qaResult, escalationNeeded, reviewId, status, agentUsed, modelProvider, usage }` — `status` is `DRAFT` if Brand QA passed or `REVISION_REQUIRED` if it didn't, exactly like content generation; `GET /clients/cda-septic-systems/reviews/$REVIEW_ID` returns the review plus its full response-draft history (see [ARCHITECTURE.md](./ARCHITECTURE.md#review-intelligence-pipeline-phase-5)).
+
 ## Running with a real model
 
 By default `MODEL_PROVIDER=mock` uses a deterministic, dependency-free content generator — no API key required, and it's what the automated tests use. To use real Claude-generated content:
@@ -116,11 +132,11 @@ ANTHROPIC_MODEL=claude-sonnet-5
 ```
 shared/          Core types & interfaces (Tool, Agent, Skill, ModelProvider, client knowledge & Content schemas)
 database/        Prisma schema, migrations, repositories, getClientContext, seed script
-integrations/    Concrete adapters: models (Anthropic/mock), social publishing, website fetch, Google, OpenClaw
-prompts/         Versioned prompt/policy modules: content + SEO prompts, Brand QA policy, Orchestrator routing policy
+integrations/    Concrete adapters: models (Anthropic/mock), social publishing, website fetch, reviews (mock/Google), OpenClaw
+prompts/         Versioned prompt/policy modules: content + SEO + review prompts, Brand QA policy, Orchestrator routing policy
 tools/           The tool abstraction layer agents call instead of hallucinating
-agents/          Orchestrator + specialist agents (Content, Brand QA, SEO implemented; others are stubs)
-skills/          Complete user-facing workflows (create-social-post, seo-audit)
+agents/          Orchestrator + specialist agents (Content, Brand QA, SEO, Review implemented; others are stubs)
+skills/          Complete user-facing workflows (create-social-post, seo-audit, review-analyze, review-respond)
 knowledge/       Structured per-client/industry/SEO/brand-voice data
 apps/api/        Express API — the composition root that wires everything together
 tests/           Cross-package test infrastructure (test DB setup)

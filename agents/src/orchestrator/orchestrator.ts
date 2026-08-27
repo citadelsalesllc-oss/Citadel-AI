@@ -49,6 +49,18 @@ export interface SeoAuditRequest {
 
 export type SeoAuditOrchestratorResult = { status: 'completed'; skillName: string; result: unknown };
 
+export interface ReviewTaskRequest {
+  clientIdOrSlug: string;
+  /** 'review_analyze' or 'review_response' — see prompts/orchestrator/v1.ts SUPPORTED_STRUCTURED_TASKS. */
+  task: string;
+  reviewId: string;
+  userInstructions?: string;
+  actor: RequestActor;
+  requestId: string;
+}
+
+export type ReviewTaskResult = { status: 'completed'; skillName: string; result: unknown };
+
 /**
  * The primary Citadel AI agent. It does NOT perform marketing tasks itself —
  * it identifies the client, validates it, classifies/validates the request,
@@ -191,6 +203,35 @@ export class Orchestrator {
         url: request.url,
         targetService: request.targetService,
         targetLocation: request.targetLocation,
+        userInstructions: request.userInstructions,
+      },
+      { actor: request.actor, requestId: request.requestId },
+    );
+
+    return { status: 'completed', skillName, result };
+  }
+
+  /**
+   * Structured entry point — POST /clients/:clientId/ai/reviews/:reviewId/
+   * analyze and .../respond (Phase 5). One method for both tasks since
+   * they share an identical request shape (client + review + optional
+   * instructions) and differ only in which skill `task` resolves to —
+   * identifies + validates the client exactly like the other structured
+   * entry points, then delegates. The review itself is validated inside
+   * the skill (review_get, tenant-scoped) rather than duplicated here,
+   * the same division of responsibility runSeoAudit() uses for URL
+   * fetching: the Orchestrator validates what it owns (the client), the
+   * skill validates what it fetches.
+   */
+  async runReviewTask(request: ReviewTaskRequest): Promise<ReviewTaskResult> {
+    await this.identifyAndValidateClient(request.clientIdOrSlug, request.actor, request.requestId);
+    const skillName = this.resolveSkillForTask(request.task);
+
+    const result = await this.skillRegistry.run(
+      skillName,
+      {
+        clientIdOrSlug: request.clientIdOrSlug,
+        reviewId: request.reviewId,
         userInstructions: request.userInstructions,
       },
       { actor: request.actor, requestId: request.requestId },

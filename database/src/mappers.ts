@@ -10,6 +10,8 @@ import type {
   MarketingNote as MarketingNoteRow,
   ContentItem as ContentItemRow,
   SeoAudit as SeoAuditRow,
+  Review as ReviewRow,
+  ReviewResponseVersion as ReviewResponseVersionRow,
   AuditLog as AuditLogRow,
 } from '@prisma/client';
 import type {
@@ -25,6 +27,8 @@ import type {
   ContentItem,
   SeoAuditRecord,
   SeoAuditResult,
+  Review,
+  ReviewResponseVersion,
   AuditLogEntry,
 } from '@citadel/shared';
 
@@ -201,6 +205,38 @@ export function toSeoAuditRecord(row: SeoAuditRow): SeoAuditRecord {
     agentVersion: row.agentVersion,
     modelProvider: row.modelProvider,
     modelUsed: row.modelUsed,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toReview(row: ReviewRow): Review {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    externalId: row.externalId,
+    source: row.source,
+    reviewerName: row.reviewerName,
+    rating: row.rating,
+    reviewText: row.reviewText,
+    reviewDate: row.reviewDate,
+    responseStatus: row.responseStatus,
+    responseText: row.responseText,
+    responseDate: row.responseDate,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toReviewResponseVersion(row: ReviewResponseVersionRow): ReviewResponseVersion {
+  return {
+    id: row.id,
+    reviewId: row.reviewId,
+    responseText: row.responseText,
+    tone: row.tone,
+    cta: row.cta,
+    qaPassed: row.qaPassed,
+    qaIssues: row.qaIssues as unknown[],
+    createdBy: row.createdBy,
     createdAt: row.createdAt,
   };
 }

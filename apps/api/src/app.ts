@@ -20,7 +20,7 @@ export function createApp(env: Env, container: Container): Express {
   app.use(createAuthMiddleware(env));
 
   app.use('/health', healthRouter());
-  app.use('/clients', clientsRouter(container.orchestrator, env.MODEL_PROVIDER));
+  app.use('/clients', clientsRouter(container.orchestrator, container.toolRegistry, env.MODEL_PROVIDER));
   app.use('/orchestrator', orchestratorRouter(container.orchestrator));
   app.use('/content', contentRouter(container.toolRegistry));
   app.use('/openclaw', openClawRouter(container.openClawTools));

@@ -22,6 +22,10 @@
       "types": "./dist/websites/index.d.ts",
       "default": "./dist/websites/index.js"
     },
+    "./reviews": {
+      "types": "./dist/reviews/index.d.ts",
+      "default": "./dist/reviews/index.js"
+    },
     "./google": {
       "types": "./dist/google/index.d.ts",
       "default": "./dist/google/index.js"

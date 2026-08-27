@@ -42,3 +42,23 @@ export interface SeoAuditLogEntry {
 export function logSeoAuditEvent(entry: SeoAuditLogEntry): void {
   console.log(JSON.stringify({ type: 'seo_audit', timestamp: new Date().toISOString(), ...entry }));
 }
+
+/** The review-analyze/review-respond analogue of GenerationLogEntry — same no-secrets guarantee, and never logs review/reviewer text, only ids and outcome metadata. */
+export interface ReviewLogEntry {
+  requestId: string;
+  clientId: string;
+  agent: string;
+  task: string;
+  reviewId?: string;
+  modelProvider?: string;
+  executionTimeMs: number;
+  success: boolean;
+  escalationNeeded?: boolean;
+  qaPassed?: boolean;
+  responseStatus?: string;
+  errorCode?: string;
+}
+
+export function logReviewEvent(entry: ReviewLogEntry): void {
+  console.log(JSON.stringify({ type: 'review_task', timestamp: new Date().toISOString(), ...entry }));
+}

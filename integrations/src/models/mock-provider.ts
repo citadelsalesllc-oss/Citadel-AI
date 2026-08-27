@@ -50,9 +50,10 @@ function extractEvidenceCatalog(text: string): EvidenceCatalogEntry[] {
  * dispatches on the JSON Schema's name (see `schemaName()` above) rather
  * than being a generic JSON Schema instance generator (which would be
  * considerably more machinery for no current benefit — see the
- * effort-scoping notes in ARCHITECTURE.md). Two structured-generation
- * callers exist today: the Content Agent (`content_generation_result`)
- * and the SEO Agent (`seo_interpretation_result`).
+ * effort-scoping notes in ARCHITECTURE.md). Three structured-generation
+ * callers exist today: the Content Agent (`content_generation_result`),
+ * the SEO Agent (`seo_interpretation_result`), and the Review Response
+ * Agent (`review_response_generation_result`).
  */
 export class MockModelProvider implements ModelProvider {
   readonly name = 'mock';
@@ -66,7 +67,52 @@ export class MockModelProvider implements ModelProvider {
       return this.generateSeoInterpretation(params, userMessage);
     }
 
+    if (params.responseSchema && name === 'review_response_generation_result') {
+      return this.generateReviewResponse(params, userMessage);
+    }
+
     return this.generateContent(params, userMessage);
+  }
+
+  private async generateReviewResponse(params: GenerateParams, userMessage: string): Promise<GenerateResult> {
+    const company = extractField(userMessage, 'Company') ?? 'the business';
+    const ratingField = extractField(userMessage, 'Star rating');
+    const rating = ratingField ? parseInt(ratingField, 10) : 3;
+    const escalationFlagged = /ESCALATION FLAGGED/.test(userMessage);
+    const phone = extractField(userMessage, 'Phone on file');
+
+    let response: string;
+    let tone: string;
+    if (escalationFlagged) {
+      response = `Thank you for bringing this to our attention. We take this seriously and would like to make it right — please reach out to us directly${phone ? ` at ${phone}` : ''} so we can address your concerns.`;
+      tone = 'professional and de-escalating';
+    } else if (rating >= 4) {
+      response = `Thank you so much for the kind words! We're glad we could help, and we appreciate you taking the time to share your experience with ${company}.`;
+      tone = 'warm and appreciative';
+    } else if (rating <= 2) {
+      response = `We're sorry to hear about your experience. We'd like to understand what happened and make it right — please reach out to us directly${phone ? ` at ${phone}` : ''}.`;
+      tone = 'professional and apologetic';
+    } else {
+      response = `Thank you for your feedback. We appreciate you taking the time to share your experience with ${company}.`;
+      tone = 'professional and neutral';
+    }
+
+    const cta = (rating <= 2 || escalationFlagged) && phone ? `Please call us at ${phone}.` : null;
+
+    const structured = { response, tone, cta, notes: [] as string[] };
+    const text = JSON.stringify(structured);
+
+    return {
+      text,
+      structured,
+      model: 'mock-deterministic-v1',
+      provider: this.name,
+      stopReason: 'end_turn',
+      usage: {
+        inputTokens: Math.ceil((params.system.length + userMessage.length) / 4),
+        outputTokens: Math.ceil(text.length / 4),
+      },
+    };
   }
 
   private async generateSeoInterpretation(params: GenerateParams, userMessage: string): Promise<GenerateResult> {

@@ -8,14 +8,15 @@ The entry point, with two ways in:
 
 1. **`Orchestrator.handle(request)`** — free-text entry point:
    1. Resolves the client via the `client_context` tool (fails fast with `ClientNotFoundError`/`ClientNotActiveError` — never falls back to another client, never acts on an archived one).
-   2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below (all still stubs from this entry point — see "SEO Agent" below for why even the implemented one is reached only through the structured entry point here).
+   2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below (all still stubs from this entry point — see "SEO Agent" and "Review Agents" below for why even the implemented ones are reached only through their structured entry points here).
    3. Delegates and normalizes the outcome into one response shape, including honest `not_implemented` and `unsupported` results (never a fabricated answer, never a crash on an unrecognized request).
 2. **`Orchestrator.generateContent(request)`** (Phase 3) — structured entry point for `POST /clients/:clientId/ai/generate`: takes an explicit `{ task, platform, topic, userInstructions? }` instead of free text and delegates to whichever skill `task` resolves to.
 3. **`Orchestrator.runSeoAudit(request)`** (Phase 4) — structured entry point for `POST /clients/:clientId/ai/seo-audit`: takes an explicit `{ task, url, targetService?, targetLocation?, userInstructions? }` and delegates the same way.
+4. **`Orchestrator.runReviewTask(request)`** (Phase 5) — structured entry point for `POST /clients/:clientId/ai/reviews/:reviewId/analyze` and `.../respond`: takes an explicit `{ task, reviewId, userInstructions? }` (one method for both `review_analyze` and `review_response`, since they share an identical request shape) and delegates the same way.
 
-Both structured entry points resolve `task` through the same private `resolveSkillForTask()` lookup (`TASK_SKILL_MAP` in `prompts/orchestrator/v1.ts` — `create_social_post -> create-social-post`, `seo_audit -> seo-audit`); anything not in that map throws `NotImplementedError` rather than guessing at a mapping. See ARCHITECTURE.md "Structured AI generation pipeline" and "SEO analysis pipeline."
+All three structured entry points resolve `task` through the same private `resolveSkillForTask()` lookup (`TASK_SKILL_MAP` in `prompts/orchestrator/v1.ts` — `create_social_post -> create-social-post`, `seo_audit -> seo-audit`, `review_analyze -> review-analyze`, `review_response -> review-respond`); anything not in that map throws `NotImplementedError` rather than guessing at a mapping. See ARCHITECTURE.md "Structured AI generation pipeline," "SEO analysis pipeline," and "Review Intelligence pipeline."
 
-Either way, the Orchestrator does not generate content, run QA, fetch a website, or touch the database itself — see `create-social-post`/`seo-audit` in `skills/` for where that actually happens.
+Either way, the Orchestrator does not generate content, run QA, fetch a website, look up a review, or touch the database itself — see `create-social-post`/`seo-audit`/`review-analyze`/`review-respond` in `skills/` for where that actually happens.
 
 ## Content Agent (`agents/src/content/`) — **implemented**
 
@@ -39,9 +40,16 @@ The free-text `Orchestrator.handle()` router still points SEO-flavored instructi
 
 `website_fetch`/`website_analyze` (`tools/src/website-tools.ts`) predate this implementation and remain available for the still-planned Website Agent below; the SEO Agent's own checks (`agents/src/seo/checks.ts`) are a separate, much deeper deterministic engine built directly for it, not layered on `website_analyze`.
 
-## Review Agent (`agents/src/reviews/`) — **stub**
+## Review Agents (`agents/src/reviews/`) — **implemented** (structured entry point) / **stub** (free-text entry point)
 
-Planned: review analysis, response drafting, recurring-theme identification, reputation recommendations. Blocked on a real review-platform integration (`review_lookup` tool currently throws `NotConfiguredError` — no invented reviews).
+Two separate `Agent` implementations, not one agent with two modes — consistent with "every specialist is a separate, independently testable unit with a narrow contract":
+
+- **`ReviewAnalysisAgent`** (`review_analyze`) — fully deterministic, no model call. Wraps `agents/src/reviews/checks.ts`'s `analyzeReview()`, returning `{ rating, classification, positivePoints, negativePoints, mentionedServices, mentionedLocations, concerns, escalationNeeded, evidence }`. `classification` is coarse (`positive`/`negative`/`neutral`/`mixed`) rather than a numeric sentiment score, since the underlying rating-plus-keyword method doesn't support claiming precision.
+- **`ReviewResponseAgent`** (`review_response`) — takes an injected `ModelProvider`, re-runs the same deterministic analysis for grounding (so a drafted response is never based on a different read of the review than `review_analyze` would report), then asks the model to draft `{ response, tone, cta, notes }` from the evidence catalog and client facts — never the raw review text directly. Returns `{ response, tone, cta, issues, evidence, escalationNeeded, modelUsed, providerUsed, usage? }`.
+
+Both are reached exclusively through their respective skills (`review-analyze`, `review-respond`) — never registered in `AgentRegistry` — the same relationship `ContentAgent` has to `create-social-post`. See ARCHITECTURE.md "Review Intelligence pipeline" for the full escalation-detection and Brand QA-reuse story.
+
+The free-text `Orchestrator.handle()` router still points review-flavored instructions ("Respond to that review...") at a **stub** (`agents/src/reviews/index.ts`'s `reviewAgent`), because that entry point has no way to identify WHICH review out of free text and both real capabilities require a `reviewId` — the same reasoning as the SEO Agent's free-text stub above.
 
 ## Website Agent (`agents/src/website/`) — **stub**
 
@@ -53,4 +61,4 @@ Planned: marketing metrics analysis, trend/weak-campaign identification, client-
 
 ---
 
-**Why stubs instead of omission?** Registering a stub (rather than leaving the agent name unrecognized) lets the Orchestrator's router match the request and return a structured, honest "not implemented yet" result — consistent with the platform rule to explicitly report missing capabilities rather than silently doing nothing or fabricating an answer. Implementing one for real is a contained change: write the agent, wrap it in a skill (if it needs tools), and add its task to `TASK_SKILL_MAP` — done, as SEO's transition from stub to real implementation in Phase 4 demonstrates. Nothing about the Orchestrator's routing or response-normalization logic changed to support it.
+**Why stubs instead of omission?** Registering a stub (rather than leaving the agent name unrecognized) lets the Orchestrator's router match the request and return a structured, honest "not implemented yet" result — consistent with the platform rule to explicitly report missing capabilities rather than silently doing nothing or fabricating an answer. Implementing one for real is a contained change: write the agent, wrap it in a skill (if it needs tools), and add its task to `TASK_SKILL_MAP` — done, as both SEO's (Phase 4) and Review's (Phase 5) transitions from stub to real implementation demonstrate. Nothing about the Orchestrator's routing or response-normalization logic changed to support either.

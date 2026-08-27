@@ -18,7 +18,10 @@ Tools are the only way agents touch real data or external systems — they never
 | `website_analyze` | `website_fetch` + basic on-page SEO heuristics | Real |
 | `seo_audit_save` | Postgres, persists a completed `SeoAuditResult`, audit-logged | Real |
 | `seo_audit_history` | Postgres, lists a client's past audits newest-first, optionally filtered to one URL | Real |
-| `review_lookup` | none — no review platform configured | Stub (`NotConfiguredError`) |
+| `review_sync` | `ReviewProvider` (mock by default) — pulls reviews into Postgres, idempotent, audit-logged | Real gate; mock provider by default |
+| `review_lookup` | Postgres (`reviewRepository`) — lists a client's already-synced reviews, optional status filter | Real |
+| `review_get` | Postgres, tenant-scoped single-review fetch | Real |
+| `review_response_save` | Postgres, saves a response draft + appends a `ReviewResponseVersion`, audit-logged | Real |
 | `analytics_lookup` | none — no analytics platform configured | Stub (`NotConfiguredError`) |
 | `web_search` | none — no search provider configured | Stub (returns `{results: [], note: "..."}`, never fabricates results) |
 
@@ -37,6 +40,12 @@ Tools are the only way agents touch real data or external systems — they never
 `website_fetch` never pretends a page was retrieved when it wasn't: a genuinely unreachable target, a timeout, a non-HTML response, or an oversized body all throw (`WebsiteUnreachableError`/`WebsiteFetchTimeoutError`/`UnsupportedContentTypeError`/`WebsiteContentTooLargeError`), while an HTTP error status from the target itself (404, 500...) is returned as data — it's a real, analyzable finding, not a fetch failure. See ARCHITECTURE.md "SEO analysis pipeline" for the full behavior, including why fetching `robots.txt`/`sitemap.xml` for the client's own, explicitly-audited URL isn't the "web crawler" the master spec says not to build yet.
 
 `seo_audit_save` never gates on a pass/fail the way `content_save` gates on Brand QA — every completed SEO audit is persisted, good or bad, so `seo_audit_history` can support before/after comparison as a client's site improves over time.
+
+## Review tools in detail (Phase 5)
+
+`review_sync` is the only tool that calls the injected `ReviewProvider` live — mock (`MockReviewProvider`, deterministic fixture data) by default, `google_business` (`GoogleBusinessReviewProvider`, currently `NotConfiguredError`) when configured. Everything else (`review_lookup`, `review_get`, the Review Agents) only ever reads the already-synced, tenant-scoped `Review` rows — see ARCHITECTURE.md "Review Intelligence pipeline" for why this ingestion-then-analysis split exists and how it makes swapping in the real Google integration a one-line factory change.
+
+`review_response_save` never gates on pass/fail either — same reasoning as `seo_audit_save` — but unlike it, every save also appends a `ReviewResponseVersion` row (`reviewRepository.saveResponse()`'s Prisma transaction), so regenerating a response never loses the previous draft's text; `GET /clients/:idOrSlug/reviews/:reviewId` returns the full version history alongside the review's current state.
 
 ## Knowledge management is API routes, not agent tools
 

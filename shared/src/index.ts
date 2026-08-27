@@ -3,6 +3,7 @@ export * from './types/client.js';
 export * from './types/content.js';
 export * from './types/audit.js';
 export * from './types/seo-audit.js';
+export * from './types/review.js';
 export * from './model-provider.js';
 export * from './website-fetch.js';
 export * from './tool.js';

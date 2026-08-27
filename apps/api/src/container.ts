@@ -1,11 +1,14 @@
 import { createModelProvider } from '@citadel/integrations/models';
 import { createPublishAdapter } from '@citadel/integrations/social';
+import { createReviewProvider } from '@citadel/integrations/reviews';
 import { skillsToOpenClawTools, type OpenClawToolDefinition } from '@citadel/integrations/openclaw';
 import { createToolRegistry } from '@citadel/tools';
 import {
   ContentAgent,
   BrandQaAgent,
   SeoAgent,
+  ReviewAnalysisAgent,
+  ReviewResponseAgent,
   Orchestrator,
   createDefaultAgentRegistry,
 } from '@citadel/agents';
@@ -24,8 +27,9 @@ export interface Container {
 /**
  * Wires every layer together (tools -> agents -> skills -> orchestrator)
  * from environment configuration. This is the only place in the app that
- * knows which concrete ModelProvider/PublishAdapter implementations are in
- * use — everything downstream depends on the shared interfaces.
+ * knows which concrete ModelProvider/PublishAdapter/ReviewProvider
+ * implementations are in use — everything downstream depends on the
+ * shared interfaces.
  */
 export function buildContainer(env: Env): Container {
   const modelProvider = createModelProvider({
@@ -40,14 +44,29 @@ export function buildContainer(env: Env): Container {
     facebookPageAccessToken: env.FACEBOOK_PAGE_ACCESS_TOKEN,
   });
 
-  const toolRegistry = createToolRegistry({ publishAdapter });
+  const reviewProvider = createReviewProvider({
+    provider: env.REVIEW_PROVIDER,
+    googleAccessToken: env.GOOGLE_BUSINESS_ACCESS_TOKEN,
+    googleLocationId: env.GOOGLE_BUSINESS_LOCATION_ID,
+  });
+
+  const toolRegistry = createToolRegistry({ publishAdapter, reviewProvider });
 
   const contentAgent = new ContentAgent(modelProvider);
   const brandQaAgent = new BrandQaAgent();
   const seoAgent = new SeoAgent(modelProvider);
+  const reviewAnalysisAgent = new ReviewAnalysisAgent();
+  const reviewResponseAgent = new ReviewResponseAgent(modelProvider);
   const agentRegistry = createDefaultAgentRegistry();
 
-  const skillRegistry = createDefaultSkillRegistry({ toolRegistry, contentAgent, brandQaAgent, seoAgent });
+  const skillRegistry = createDefaultSkillRegistry({
+    toolRegistry,
+    contentAgent,
+    brandQaAgent,
+    seoAgent,
+    reviewAnalysisAgent,
+    reviewResponseAgent,
+  });
 
   const orchestrator = new Orchestrator(toolRegistry, skillRegistry, agentRegistry);
 

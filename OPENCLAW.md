@@ -34,9 +34,21 @@ This repo does not depend on an OpenClaw SDK/runtime — none was available to i
 3. Wire OpenClaw's tool-invocation callback to call `.handler(input, ctx)`, supplying an `actor`/`requestId` appropriate to whoever is driving the OpenClaw session (a Citadel team member, a scheduled job, etc.).
 4. If OpenClaw needs the specialist agents or raw tools directly (not just full skills), the same pattern applies: `agentRegistry.list()` / `toolRegistry.list()` are already available from the container and can be mapped the same way — write a small `agentsToOpenClawTools`/`toolsToOpenClawTools` alongside `skillsToOpenClawTools` if/when that's needed, following the same "take data in, don't import the concrete package" pattern.
 
-## Phase 3-4: structured generation stays OpenClaw-ready too
+## Phase 3-5: structured generation stays OpenClaw-ready too
 
-`Orchestrator.generateContent()` and `Orchestrator.runSeoAudit()` (the structured AI pipelines — see ARCHITECTURE.md "Structured AI generation pipeline" and "SEO analysis pipeline") follow the same rule as everything above: each is a plain method on `Orchestrator` with a typed input/output, callable directly, with no OpenClaw-specific branching. `apps/api`'s `POST /clients/:clientId/ai/generate` and `POST /clients/:clientId/ai/seo-audit` routes are each one caller; an OpenClaw tool handler would be another, calling the same methods with the same contracts. Nothing about either assumes HTTP or any particular runtime — and the pattern held exactly the same way when SEO was added in Phase 4 as it did for content generation in Phase 3, without changing anything about how OpenClaw would eventually connect.
+`Orchestrator.generateContent()`, `Orchestrator.runSeoAudit()`, and `Orchestrator.runReviewTask()` (the structured AI pipelines — see ARCHITECTURE.md "Structured AI generation pipeline," "SEO analysis pipeline," and "Review Intelligence pipeline") follow the same rule as everything above: each is a plain method on `Orchestrator` with a typed input/output, callable directly, with no OpenClaw-specific branching. `apps/api`'s `POST /clients/:clientId/ai/generate`, `POST /clients/:clientId/ai/seo-audit`, and `POST /clients/:clientId/ai/reviews/:reviewId/analyze`/`.../respond` routes are each one caller; an OpenClaw tool handler would be another, calling the same methods with the same contracts. Nothing about any of them assumes HTTP or any particular runtime — the pattern held exactly the same way for Review in Phase 5 as it did for SEO in Phase 4 and content generation in Phase 3, without changing anything about how OpenClaw would eventually connect.
+
+## Future Review Agent workflow (Phase 5)
+
+The master spec's eventual target workflow for reviews is:
+
+```
+NEW REVIEW -> OpenClaw -> Citadel Review Agent -> QA -> DRAFT -> Human approval
+```
+
+Mapped onto what exists today: "NEW REVIEW" is a row `review_sync` (or, later, a real Google Business Profile webhook/poll) adds to the `Review` table; "OpenClaw" is a future trigger — a scheduled poll, or eventually a Google push notification — that calls an OpenClaw tool wrapping `Orchestrator.runReviewTask({ task: 'review_response', reviewId, ... })`; "Citadel Review Agent" is `ReviewResponseAgent` (which internally runs `ReviewAnalysisAgent`'s deterministic analysis first, then drafts); "QA" is the reused `BrandQaAgent`; "DRAFT" is exactly the `ReviewResponseStatus` a passing draft is saved as today, via `review_response_save`; "Human approval" is the still-manual step this repo does not build past — nothing in Phase 5 (or planned for the OpenClaw wiring above) auto-approves or auto-publishes a response. Once a real `GoogleBusinessReviewProvider` exists (see ARCHITECTURE.md "Future Google Business Profile integration"), "NEW REVIEW" becomes an actual webhook/poll rather than a manual `review_sync` call, but every step after it — Review Agent, QA, DRAFT, human approval — needs no change, since they were already built against the `Review` table and the `ReviewProvider` interface, not against Google specifically.
+
+This is documentation only, per the master spec ("Do not fully integrate OpenClaw yet... Document this architecture") — no OpenClaw SDK, webhook receiver, or scheduling mechanism is implemented in Phase 5.
 
 ## Model provider vs. OpenClaw
 

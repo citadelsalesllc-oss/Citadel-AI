@@ -11,6 +11,7 @@ import {
   faqRepository,
   marketingNoteRepository,
   seoAuditRepository,
+  reviewRepository,
   getClientContext,
 } from '@citadel/database';
 import {
@@ -27,12 +28,15 @@ import {
   CreateFaqInputSchema,
   CreateMarketingNoteInputSchema,
   ContentTypeSchema,
+  ReviewResponseStatusSchema,
+  type Review,
+  type ToolRegistry,
 } from '@citadel/shared';
 import type { Orchestrator } from '@citadel/agents';
-import type { CreateSocialPostOutput, SeoAuditOutput } from '@citadel/skills';
+import type { CreateSocialPostOutput, SeoAuditOutput, ReviewAnalyzeOutput, ReviewRespondOutput } from '@citadel/skills';
 import { z } from 'zod';
 import { asyncHandler } from './async-handler.js';
-import { logGenerationEvent, logSeoAuditEvent } from '../logger.js';
+import { logGenerationEvent, logSeoAuditEvent, logReviewEvent } from '../logger.js';
 
 /**
  * All client knowledge sub-resources (services, service areas, brand
@@ -45,7 +49,7 @@ import { logGenerationEvent, logSeoAuditEvent } from '../logger.js';
  * client's real id — never a caller-supplied one — which is what makes
  * cross-tenant writes structurally impossible here.
  */
-export function clientsRouter(orchestrator: Orchestrator, modelProviderName: string): Router {
+export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegistry, modelProviderName: string): Router {
   const router = Router();
 
   router.get(
@@ -488,6 +492,184 @@ export function clientsRouter(orchestrator: Orchestrator, modelProviderName: str
       const url = typeof req.query.url === 'string' ? req.query.url : undefined;
       const seoAudits = await seoAuditRepository.listByClient(client.id, url);
       res.json({ seoAudits });
+    }),
+  );
+
+  // --- Reviews (Phase 5) ---------------------------------------------------------------
+  // REVIEW DATA -> REVIEW ANALYSIS -> CLIENT CONTEXT -> REVIEW AGENT -> AI
+  // MODEL -> BRAND QA -> SAVE RESPONSE AS DRAFT -> RETURN RESULT. review_sync
+  // pulls from the configured ReviewProvider (mock by default — see
+  // ARCHITECTURE.md "Review Intelligence pipeline") into persisted Review
+  // rows; analyze/respond then operate only on those rows, never the
+  // provider live.
+
+  router.get(
+    '/:idOrSlug/reviews',
+    asyncHandler(async (req, res) => {
+      const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
+      const statusParam = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const status = statusParam ? ReviewResponseStatusSchema.parse(statusParam) : undefined;
+      const reviews = await reviewRepository.listByClient(client.id, status);
+      res.json({ reviews });
+    }),
+  );
+
+  router.get(
+    '/:idOrSlug/reviews/:reviewId',
+    asyncHandler(async (req, res) => {
+      const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
+      const review = await reviewRepository.requireByIdForClient(client.id, req.params.reviewId as string);
+      const versions = await reviewRepository.listResponseVersions(client.id, review.id);
+      res.json({ review, responseVersions: versions });
+    }),
+  );
+
+  router.post(
+    '/:idOrSlug/reviews/sync',
+    asyncHandler(async (req, res) => {
+      const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
+      const reviews = await toolRegistry.call<Review[]>(
+        'review_sync',
+        { clientId: client.id },
+        { actor: req.actor, requestId: req.requestId, clientId: client.id },
+      );
+      res.status(201).json({ reviews });
+    }),
+  );
+
+  const ReviewTaskParamsSchema = z.object({ idOrSlug: z.string(), reviewId: z.string() });
+  const ReviewTaskBodySchema = z.object({ instructions: z.string().optional() });
+
+  router.post(
+    '/:idOrSlug/ai/reviews/:reviewId/analyze',
+    asyncHandler(async (req, res) => {
+      const params = ReviewTaskParamsSchema.parse(req.params);
+      const body = ReviewTaskBodySchema.parse(req.body ?? {});
+      const startedAt = Date.now();
+
+      try {
+        const outcome = await orchestrator.runReviewTask({
+          clientIdOrSlug: params.idOrSlug,
+          task: 'review_analyze',
+          reviewId: params.reviewId,
+          userInstructions: body.instructions,
+          actor: req.actor,
+          requestId: req.requestId,
+        });
+
+        const result = outcome.result as ReviewAnalyzeOutput;
+
+        logReviewEvent({
+          requestId: req.requestId,
+          clientId: result.review.clientId,
+          agent: outcome.skillName,
+          task: 'review_analyze',
+          reviewId: result.review.id,
+          executionTimeMs: Date.now() - startedAt,
+          success: true,
+          escalationNeeded: result.analysis.escalationNeeded,
+        });
+
+        res.json({
+          analysis: {
+            rating: result.analysis.rating,
+            classification: result.analysis.classification,
+            positive_points: result.analysis.positivePoints,
+            negative_points: result.analysis.negativePoints,
+            mentioned_services: result.analysis.mentionedServices,
+            mentioned_locations: result.analysis.mentionedLocations,
+            concerns: result.analysis.concerns,
+            escalation_needed: result.analysis.escalationNeeded,
+            evidence: result.analysis.evidence,
+          },
+          reviewId: result.review.id,
+          clientId: result.review.clientId,
+          agentUsed: outcome.skillName,
+        });
+      } catch (error) {
+        logReviewEvent({
+          requestId: req.requestId,
+          clientId: params.idOrSlug,
+          agent: 'review-analysis-agent',
+          task: 'review_analyze',
+          reviewId: params.reviewId,
+          executionTimeMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof CitadelError ? error.code : 'UNKNOWN_ERROR',
+        });
+        throw error;
+      }
+    }),
+  );
+
+  router.post(
+    '/:idOrSlug/ai/reviews/:reviewId/respond',
+    asyncHandler(async (req, res) => {
+      const params = ReviewTaskParamsSchema.parse(req.params);
+      const body = ReviewTaskBodySchema.parse(req.body ?? {});
+      const startedAt = Date.now();
+
+      try {
+        const outcome = await orchestrator.runReviewTask({
+          clientIdOrSlug: params.idOrSlug,
+          task: 'review_response',
+          reviewId: params.reviewId,
+          userInstructions: body.instructions,
+          actor: req.actor,
+          requestId: req.requestId,
+        });
+
+        const result = outcome.result as ReviewRespondOutput;
+
+        logReviewEvent({
+          requestId: req.requestId,
+          clientId: result.review.clientId,
+          agent: outcome.skillName,
+          task: 'review_response',
+          reviewId: result.review.id,
+          modelProvider: result.generation.providerUsed,
+          executionTimeMs: Date.now() - startedAt,
+          success: true,
+          escalationNeeded: result.generation.escalationNeeded,
+          qaPassed: result.qa.passed,
+          responseStatus: result.review.responseStatus,
+        });
+
+        res.json({
+          response: {
+            response: result.generation.response,
+            tone: result.generation.tone,
+            cta: result.generation.cta,
+            issues: result.generation.issues,
+            evidence: result.generation.evidence,
+          },
+          qaResult: {
+            passed: result.qa.passed,
+            issues: result.qa.issues,
+            warnings: result.qa.warnings,
+          },
+          escalationNeeded: result.generation.escalationNeeded,
+          reviewId: result.review.id,
+          clientId: result.review.clientId,
+          status: result.review.responseStatus,
+          agentUsed: outcome.skillName,
+          modelProvider: { name: result.generation.providerUsed, model: result.generation.modelUsed },
+          usage: result.generation.usage ?? null,
+        });
+      } catch (error) {
+        logReviewEvent({
+          requestId: req.requestId,
+          clientId: params.idOrSlug,
+          agent: 'review-response-agent',
+          task: 'review_response',
+          reviewId: params.reviewId,
+          modelProvider: modelProviderName,
+          executionTimeMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof CitadelError ? error.code : 'UNKNOWN_ERROR',
+        });
+        throw error;
+      }
     }),
   );
 
