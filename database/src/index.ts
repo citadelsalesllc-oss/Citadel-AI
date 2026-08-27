@@ -12,5 +12,6 @@ export { contentRepository } from './repositories/content-repository.js';
 export { seoAuditRepository } from './repositories/seo-audit-repository.js';
 export { reviewRepository } from './repositories/review-repository.js';
 export { auditRepository } from './repositories/audit-repository.js';
+export { activityLogRepository } from './repositories/activity-log-repository.js';
 export { getClientContext } from './client-context.js';
 export * from './mappers.js';

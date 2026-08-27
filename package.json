@@ -17,7 +17,8 @@
     "db:generate": "pnpm --filter @citadel/database run generate",
     "db:migrate": "pnpm --filter @citadel/database run migrate",
     "db:seed": "pnpm --filter @citadel/database run seed",
-    "dev:api": "pnpm --filter @citadel/api run dev"
+    "dev:api": "pnpm --filter @citadel/api run dev",
+    "dev:dashboard": "pnpm --filter @citadel/dashboard run dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

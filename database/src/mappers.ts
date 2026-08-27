@@ -9,10 +9,12 @@ import type {
   Faq as FaqRow,
   MarketingNote as MarketingNoteRow,
   ContentItem as ContentItemRow,
+  ContentVersion as ContentVersionRow,
   SeoAudit as SeoAuditRow,
   Review as ReviewRow,
   ReviewResponseVersion as ReviewResponseVersionRow,
   AuditLog as AuditLogRow,
+  ActivityLog as ActivityLogRow,
 } from '@prisma/client';
 import type {
   ClientRecord,
@@ -25,11 +27,13 @@ import type {
   Faq,
   MarketingNote,
   ContentItem,
+  ContentVersion,
   SeoAuditRecord,
   SeoAuditResult,
   Review,
   ReviewResponseVersion,
   AuditLogEntry,
+  ActivityLogEntry,
 } from '@citadel/shared';
 
 export function toClientRecord(row: ClientRow): ClientRecord {
@@ -237,6 +241,7 @@ export function toReviewResponseVersion(row: ReviewResponseVersionRow): ReviewRe
     qaPassed: row.qaPassed,
     qaIssues: row.qaIssues as unknown[],
     createdBy: row.createdBy,
+    source: row.source,
     createdAt: row.createdAt,
   };
 }
@@ -249,6 +254,34 @@ export function toAuditLogEntry(row: AuditLogRow): AuditLogEntry {
     action: row.action,
     targetType: row.targetType,
     targetId: row.targetId,
+    metadata: row.metadata as Record<string, unknown>,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toContentVersion(row: ContentVersionRow): ContentVersion {
+  return {
+    id: row.id,
+    contentItemId: row.contentItemId,
+    body: row.body,
+    metadata: row.metadata as Record<string, unknown>,
+    source: row.source,
+    editedBy: row.editedBy,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toActivityLogEntry(row: ActivityLogRow): ActivityLogEntry {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    requestId: row.requestId,
+    agent: row.agent,
+    task: row.task,
+    modelProvider: row.modelProvider,
+    executionTimeMs: row.executionTimeMs,
+    success: row.success,
+    errorCode: row.errorCode,
     metadata: row.metadata as Record<string, unknown>,
     createdAt: row.createdAt,
   };

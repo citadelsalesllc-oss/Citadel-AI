@@ -106,3 +106,76 @@ export const reviewResponseSaveTool: Tool<ReviewResponseSaveInput, Review> = {
     return review;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Review-response approval (Phase 6) — the review-response equivalent of
+// approval-tools.ts's contentApproveTool/contentRejectTool/
+// contentRequestRevisionTool. Status-only transitions via
+// reviewRepository.transitionStatus(), each recording an audit entry so
+// "record reviewer, record timestamp, create an audit record" holds for
+// review responses exactly as it does for content.
+// ---------------------------------------------------------------------------
+
+const ReviewApprovalInputSchema = z.object({
+  clientId: z.string().min(1),
+  reviewId: z.string().min(1),
+  reviewer: z.string().min(1),
+});
+type ReviewApprovalInput = z.infer<typeof ReviewApprovalInputSchema>;
+
+export const reviewApproveTool: Tool<ReviewApprovalInput, Review> = {
+  name: 'review_approve',
+  description: "Approve a client's review response that is in DRAFT. Does not publish it.",
+  inputSchema: ReviewApprovalInputSchema,
+  async execute(input, context: ToolContext) {
+    const review = await reviewRepository.transitionStatus(input.clientId, input.reviewId, 'APPROVED');
+    await auditRepository.record({
+      clientId: review.clientId,
+      actor: context.actor.label,
+      action: 'review_approve',
+      targetType: 'Review',
+      targetId: review.id,
+      metadata: { reviewer: input.reviewer },
+    });
+    return review;
+  },
+};
+
+const ReviewRejectInputSchema = ReviewApprovalInputSchema.extend({ reason: z.string().min(1) });
+type ReviewRejectInput = z.infer<typeof ReviewRejectInputSchema>;
+
+export const reviewRejectTool: Tool<ReviewRejectInput, Review> = {
+  name: 'review_reject',
+  description: "Reject a client's review response that is in DRAFT, ending its lifecycle.",
+  inputSchema: ReviewRejectInputSchema,
+  async execute(input, context: ToolContext) {
+    const review = await reviewRepository.transitionStatus(input.clientId, input.reviewId, 'REJECTED');
+    await auditRepository.record({
+      clientId: review.clientId,
+      actor: context.actor.label,
+      action: 'review_reject',
+      targetType: 'Review',
+      targetId: review.id,
+      metadata: { reviewer: input.reviewer, reason: input.reason },
+    });
+    return review;
+  },
+};
+
+export const reviewRequestRevisionTool: Tool<ReviewRejectInput, Review> = {
+  name: 'review_request_revision',
+  description: "Send a client's review response that is in DRAFT back for revision, with feedback.",
+  inputSchema: ReviewRejectInputSchema,
+  async execute(input, context: ToolContext) {
+    const review = await reviewRepository.transitionStatus(input.clientId, input.reviewId, 'REVISION_REQUIRED');
+    await auditRepository.record({
+      clientId: review.clientId,
+      actor: context.actor.label,
+      action: 'review_request_revision',
+      targetType: 'Review',
+      targetId: review.id,
+      metadata: { reviewer: input.reviewer, reason: input.reason },
+    });
+    return review;
+  },
+};

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VersionSourceSchema } from './version.js';
 
 export const ContentTypeSchema = z.enum([
   'SOCIAL_POST',
@@ -75,3 +76,27 @@ export const CreateContentItemInputSchema = z.object({
   initialStatus: z.enum(['DRAFT', 'REVISION_REQUIRED']).default('DRAFT'),
 });
 export type CreateContentItemInput = z.infer<typeof CreateContentItemInputSchema>;
+
+/**
+ * One row per version of a content item's body — the first (source
+ * AI_GENERATED) is written alongside the ContentItem itself; every human
+ * edit from the Command Center dashboard (Phase 6) appends another
+ * (source HUMAN_EDIT) rather than overwriting it. See
+ * database/prisma/schema.prisma's ContentVersion doc comment.
+ */
+export const ContentVersionSchema = z.object({
+  id: z.string(),
+  contentItemId: z.string(),
+  body: z.string(),
+  metadata: z.record(z.unknown()).default({}),
+  source: VersionSourceSchema,
+  editedBy: z.string(),
+  createdAt: z.string().or(z.date()),
+});
+export type ContentVersion = z.infer<typeof ContentVersionSchema>;
+
+export const EditContentInputSchema = z.object({
+  body: z.string().min(1),
+  editedBy: z.string().min(1),
+});
+export type EditContentInput = z.infer<typeof EditContentInputSchema>;

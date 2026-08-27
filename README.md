@@ -21,6 +21,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the system is put together, [AG
 
 **Phase 5 (Review Intelligence Agent):** the third and fourth specialists — `ReviewAnalysisAgent` (deterministic, no model call) and `ReviewResponseAgent` (drafts a reply, grounded in the same analysis) — via `POST /clients/:clientId/ai/reviews/:reviewId/analyze` and `.../respond`. Reviews are ingested through a swappable `ReviewProvider` (mock fixtures today; a real Google Business Profile adapter is a documented future seam, never faked) into a persisted `Review` table, then analyzed for sentiment, service/location mentions, and — via a structured keyword-category match — potential escalation (legal threats, safety/injury/fraud/discrimination allegations, direct threats). Response drafts reuse the exact same `BrandQaAgent` every other generated artifact passes through, and every draft appends to an append-only `ReviewResponseVersion` history rather than overwriting the last one. Escalation is surfaced as a flag for a human reviewer, never a trigger for a different code path — every response, escalation or not, is saved as `DRAFT`/`REVISION_REQUIRED` and never auto-published. See [ARCHITECTURE.md](./ARCHITECTURE.md#review-intelligence-pipeline-phase-5).
 
+**Phase 6 (Citadel Command Center):** an internal staff dashboard — not billing, not a client portal — for reviewing and approving everything the specialist agents above have produced, across every client at once. `apps/dashboard` serves a vanilla HTML/CSS/JS single-page app calling a new `/dashboard/*` JSON API in `apps/api` (`apps/api/src/routes/dashboard.ts`), which reuses the existing repositories and tenant-scoped approval tools rather than introducing new business logic. Covers an Overview (real counts, never fabricated), a Clients list/detail (reusing the Phase 2 knowledge model), a unified Approval Center for content, a Content browser, SEO audit and Review displays (including live escalation analysis), an AI Activity feed newly persisted to the database (`ActivityLog`, previously only console-logged), and a System Status page that reports real component health. Every human edit of AI-generated content or a review response appends a new version (`ContentVersion`/`ReviewResponseVersion`, `source: HUMAN_EDIT`) rather than overwriting the original — the AI-generated version is always still there. No new AI capability, external integration, or auto-publishing was added; the dashboard only makes existing state visible and actionable by a human. See [ARCHITECTURE.md](./ARCHITECTURE.md#citadel-command-center-dashboard-phase-6) and [SECURITY.md](./SECURITY.md#command-center-authentication-boundary-phase-6).
+
 Strategy, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
 
 ## Prerequisites
@@ -105,6 +107,15 @@ curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/reviews/$REVIEW
 
 `analyze` returns `{ analysis: { rating, classification, positive_points, negative_points, mentioned_services, mentioned_locations, concerns, escalation_needed, evidence }, reviewId, clientId, agentUsed }` — fully deterministic, no model call. `respond` returns `{ response, qaResult, escalationNeeded, reviewId, status, agentUsed, modelProvider, usage }` — `status` is `DRAFT` if Brand QA passed or `REVISION_REQUIRED` if it didn't, exactly like content generation; `GET /clients/cda-septic-systems/reviews/$REVIEW_ID` returns the review plus its full response-draft history (see [ARCHITECTURE.md](./ARCHITECTURE.md#review-intelligence-pipeline-phase-5)).
 
+### Or open the Citadel Command Center dashboard (Phase 6)
+
+```bash
+pnpm dev:api          # in one terminal — the dashboard calls this
+pnpm dev:dashboard     # in another — serves the dashboard on http://localhost:3001
+```
+
+Open `http://localhost:3001` in a browser. No login is required in local dev (`API_AUTH_TOKEN` unset — see [SECURITY.md](./SECURITY.md#command-center-authentication-boundary-phase-6)); every action you take (approve, reject, request revision, edit) calls the real `/dashboard/*` endpoints above and is reflected immediately in the underlying `ContentItem`/`Review` tables — nothing in the dashboard is mocked or read-only-for-display.
+
 ## Running with a real model
 
 By default `MODEL_PROVIDER=mock` uses a deterministic, dependency-free content generator — no API key required, and it's what the automated tests use. To use real Claude-generated content:
@@ -126,6 +137,7 @@ ANTHROPIC_MODEL=claude-sonnet-5
 | `pnpm db:migrate` | Applies Prisma migrations to `DATABASE_URL` |
 | `pnpm db:seed` | Seeds demo clients from `knowledge/clients/` |
 | `pnpm dev:api` | Runs the API with hot reload |
+| `pnpm dev:dashboard` | Runs the Command Center dashboard with hot reload |
 
 ## Project layout
 
@@ -138,7 +150,8 @@ tools/           The tool abstraction layer agents call instead of hallucinating
 agents/          Orchestrator + specialist agents (Content, Brand QA, SEO, Review implemented; others are stubs)
 skills/          Complete user-facing workflows (create-social-post, seo-audit, review-analyze, review-respond)
 knowledge/       Structured per-client/industry/SEO/brand-voice data
-apps/api/        Express API — the composition root that wires everything together
+apps/api/        Express API — the composition root that wires everything together, incl. the /dashboard/* JSON API
+apps/dashboard/  Citadel Command Center — static file server + vanilla HTML/CSS/JS staff dashboard (Phase 6)
 tests/           Cross-package test infrastructure (test DB setup)
 docs/            (reserved for future long-form docs)
 ```

@@ -355,7 +355,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
 
         const result = outcome.result as CreateSocialPostOutput;
 
-        logGenerationEvent({
+        await logGenerationEvent({
           requestId: req.requestId,
           clientId: result.contentItem.clientId,
           agent: outcome.skillName,
@@ -388,7 +388,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
           usage: result.generation.usage ?? null,
         });
       } catch (error) {
-        logGenerationEvent({
+        await logGenerationEvent({
           requestId: req.requestId,
           clientId: clientIdOrSlug,
           agent: 'content-agent',
@@ -439,7 +439,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
         const result = outcome.result as SeoAuditOutput;
         const { audit, auditRecord } = result;
 
-        logSeoAuditEvent({
+        await logSeoAuditEvent({
           requestId: req.requestId,
           clientId: auditRecord.clientId,
           agent: outcome.skillName,
@@ -470,7 +470,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
           executionTimeMs: Date.now() - startedAt,
         });
       } catch (error) {
-        logSeoAuditEvent({
+        await logSeoAuditEvent({
           requestId: req.requestId,
           clientId: clientIdOrSlug,
           agent: 'seo-agent',
@@ -559,7 +559,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
 
         const result = outcome.result as ReviewAnalyzeOutput;
 
-        logReviewEvent({
+        await logReviewEvent({
           requestId: req.requestId,
           clientId: result.review.clientId,
           agent: outcome.skillName,
@@ -587,7 +587,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
           agentUsed: outcome.skillName,
         });
       } catch (error) {
-        logReviewEvent({
+        await logReviewEvent({
           requestId: req.requestId,
           clientId: params.idOrSlug,
           agent: 'review-analysis-agent',
@@ -621,7 +621,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
 
         const result = outcome.result as ReviewRespondOutput;
 
-        logReviewEvent({
+        await logReviewEvent({
           requestId: req.requestId,
           clientId: result.review.clientId,
           agent: outcome.skillName,
@@ -657,7 +657,7 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
           usage: result.generation.usage ?? null,
         });
       } catch (error) {
-        logReviewEvent({
+        await logReviewEvent({
           requestId: req.requestId,
           clientId: params.idOrSlug,
           agent: 'review-response-agent',

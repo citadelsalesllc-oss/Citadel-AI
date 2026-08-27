@@ -90,7 +90,7 @@ describe('review tools', () => {
       {
         clientId: clientA.id,
         reviewId: review.id,
-        response: { responseText: 'Thank you!', tone: 'warm', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Test Actor', status: 'DRAFT' },
+        response: { responseText: 'Thank you!', tone: 'warm', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Test Actor', status: 'DRAFT', source: 'AI_GENERATED' },
       },
       actorContext,
     );
@@ -108,7 +108,7 @@ describe('review tools', () => {
       {
         clientId: clientA.id,
         reviewId: review.id,
-        response: { responseText: 'First draft.', tone: 'neutral', cta: null, qaPassed: false, qaIssues: [{ code: 'X' }], createdBy: 'Test Actor', status: 'REVISION_REQUIRED' },
+        response: { responseText: 'First draft.', tone: 'neutral', cta: null, qaPassed: false, qaIssues: [{ code: 'X' }], createdBy: 'Test Actor', status: 'REVISION_REQUIRED', source: 'AI_GENERATED' },
       },
       actorContext,
     );
@@ -116,7 +116,7 @@ describe('review tools', () => {
       {
         clientId: clientA.id,
         reviewId: review.id,
-        response: { responseText: 'Revised draft.', tone: 'neutral', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Test Actor', status: 'DRAFT' },
+        response: { responseText: 'Revised draft.', tone: 'neutral', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Test Actor', status: 'DRAFT', source: 'AI_GENERATED' },
       },
       actorContext,
     );
@@ -135,7 +135,7 @@ describe('review tools', () => {
         {
           clientId: clientB.id,
           reviewId: review.id,
-          response: { responseText: 'Attack.', tone: 'x', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Attacker', status: 'DRAFT' },
+          response: { responseText: 'Attack.', tone: 'x', cta: null, qaPassed: true, qaIssues: [], createdBy: 'Attacker', status: 'DRAFT', source: 'AI_GENERATED' },
         },
         actorContext,
       ),

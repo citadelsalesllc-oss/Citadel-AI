@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Citadel Command Center</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">Citadel Command Center</div>
+        <nav class="tabs" id="tabs">
+          <a href="#/overview" data-tab="overview">Overview</a>
+          <a href="#/clients" data-tab="clients">Clients</a>
+          <a href="#/approvals" data-tab="approvals">Approvals</a>
+          <a href="#/content" data-tab="content">Content</a>
+          <a href="#/seo" data-tab="seo">SEO</a>
+          <a href="#/reviews" data-tab="reviews">Reviews</a>
+          <a href="#/activity" data-tab="activity">AI Activity</a>
+          <a href="#/system" data-tab="system">System</a>
+        </nav>
+      </header>
+      <main id="view-root" class="view-root" aria-live="polite">
+        <p class="muted">Loading…</p>
+      </main>
+    </div>
+
+    <script src="/config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -65,6 +65,7 @@ model Client {
   seoAudits       SeoAudit[]
   reviews         Review[]
   auditLogs       AuditLog[]
+  activityLogs    ActivityLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,8 +278,38 @@ model ContentItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  versions ContentVersion[]
+
   @@index([clientId, status])
   @@map("content_items")
+}
+
+enum VersionSource {
+  AI_GENERATED
+  HUMAN_EDIT
+
+  @@map("version_source")
+}
+
+/// Append-only history of every version of a content item's body — the
+/// first row (source AI_GENERATED) is written atomically with the
+/// ContentItem itself (see contentRepository.create()); every human edit
+/// from the Command Center dashboard (Phase 6) appends another row
+/// (source HUMAN_EDIT) rather than overwriting it, so the original
+/// AI-generated text stays traceable forever. Mirrors ReviewResponseVersion.
+model ContentVersion {
+  id            String        @id @default(cuid())
+  contentItem   ContentItem   @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  contentItemId String
+  body          String
+  metadata      Json          @default("{}")
+  source        VersionSource
+  editedBy      String
+
+  createdAt DateTime @default(now())
+
+  @@index([contentItemId, createdAt])
+  @@map("content_versions")
 }
 
 /// One row per SEO Agent run (Phase 4). `result` stores the full structured
@@ -377,11 +408,43 @@ model ReviewResponseVersion {
   qaPassed     Boolean
   qaIssues     Json    @default("[]")
   createdBy    String
+  // Defaults to AI_GENERATED for the historical rows written before Phase
+  // 6 (every one of them WAS AI-generated, since editResponse() — the
+  // first thing capable of writing HUMAN_EDIT — didn't exist yet).
+  source       VersionSource @default(AI_GENERATED)
 
   createdAt DateTime @default(now())
 
   @@index([reviewId, createdAt])
   @@map("review_response_versions")
+}
+
+/// Persisted AI Activity feed (Phase 6) — the queryable counterpart to the
+/// structured JSON lines apps/api/src/logger.ts writes to stdout. Every
+/// generation/audit/review-task attempt (success or failure) gets a row
+/// here so the Command Center dashboard's activity feed is real data, not
+/// something reconstructed from logs. Same no-secrets guarantee as the
+/// console logger: only ids and outcome metadata are ever stored, never
+/// generated content, review text, or credentials.
+model ActivityLog {
+  id       String  @id @default(cuid())
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId String?
+
+  requestId       String
+  agent           String
+  task            String
+  modelProvider   String?
+  executionTimeMs Int
+  success         Boolean
+  errorCode       String?
+  metadata        Json    @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([createdAt])
+  @@map("activity_logs")
 }
 
 model AuditLog {

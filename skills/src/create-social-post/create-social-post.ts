@@ -95,6 +95,7 @@ export function createCreateSocialPostSkill(deps: CreateSocialPostDeps): Skill<C
           platform: input.platform,
           body: generation.content,
           metadata: {
+            agent: 'create-social-post',
             topic: input.topic,
             userInstructions: input.userInstructions,
             hashtags: generation.hashtags,

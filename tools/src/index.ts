@@ -13,6 +13,14 @@ export type { WebSearchOutput, WebSearchResultItem } from './web-search-tool.js'
 export { createWebsiteFetchTool, createWebsiteAnalyzeTool } from './website-tools.js';
 export type { WebsiteAnalysis } from './website-tools.js';
 export { seoAuditSaveTool, seoAuditHistoryTool } from './seo-tools.js';
-export { createReviewSyncTool, reviewLookupTool, reviewGetTool, reviewResponseSaveTool } from './review-tools.js';
+export {
+  createReviewSyncTool,
+  reviewLookupTool,
+  reviewGetTool,
+  reviewResponseSaveTool,
+  reviewApproveTool,
+  reviewRejectTool,
+  reviewRequestRevisionTool,
+} from './review-tools.js';
 export { createToolRegistry } from './registry.js';
 export type { ToolRegistryOptions } from './registry.js';

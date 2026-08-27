@@ -17,7 +17,15 @@ import { analyticsLookupTool } from './stub-data-tools.js';
 import { webSearchTool } from './web-search-tool.js';
 import { createWebsiteFetchTool, createWebsiteAnalyzeTool } from './website-tools.js';
 import { seoAuditSaveTool, seoAuditHistoryTool } from './seo-tools.js';
-import { createReviewSyncTool, reviewLookupTool, reviewGetTool, reviewResponseSaveTool } from './review-tools.js';
+import {
+  createReviewSyncTool,
+  reviewLookupTool,
+  reviewGetTool,
+  reviewResponseSaveTool,
+  reviewApproveTool,
+  reviewRejectTool,
+  reviewRequestRevisionTool,
+} from './review-tools.js';
 
 export interface ToolRegistryOptions {
   publishAdapter?: PublishAdapter;
@@ -51,6 +59,9 @@ export function createToolRegistry(options: ToolRegistryOptions = {}): ToolRegis
   registry.register(reviewLookupTool);
   registry.register(reviewGetTool);
   registry.register(reviewResponseSaveTool);
+  registry.register(reviewApproveTool);
+  registry.register(reviewRejectTool);
+  registry.register(reviewRequestRevisionTool);
 
   return registry;
 }

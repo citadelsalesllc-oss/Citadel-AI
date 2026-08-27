@@ -21,11 +21,36 @@ Agents receive the full `ClientContext` scoped to exactly the client the request
 
 **Review tools** (`review_sync`, `review_lookup`, `review_get`, `review_response_save`, Phase 5) follow the identical pattern: `reviewRepository`'s methods scope every lookup by `(id, clientId)` together (`database/src/repositories/review-repository.ts`), including `listResponseVersions()`, which re-checks review ownership before returning any version row. `review_get`/`review_response_save` raise the same `ResourceNotFoundError` whether the review id is unknown or belongs to a different client — a cross-tenant analyze/respond call has no code path to reach, proven in `tools/src/__tests__/review-tools.test.ts` and `apps/api/src/__tests__/reviews.test.ts` ("keeps reviews isolated between clients").
 
+**The Command Center dashboard (Phase 6) is a deliberate, narrowly-scoped exception to "reads are tenant-scoped" — never to "writes are tenant-scoped."** `contentRepository`, `reviewRepository`, and `seoAuditRepository` each gained a `listAllForDashboard()`/`requireByIdGlobal()` pair, clearly marked `DASHBOARD-ONLY` in their doc comments, that reads across every client rather than filtering by `clientId` — an internal staff command center inherently needs that visibility (a unified approval queue, a cross-client activity feed). These methods are never registered as an agent-callable `Tool` and are only ever called from `apps/api/src/routes/dashboard.ts`. Every WRITE the dashboard performs still derives the authoritative `clientId` from the fetched record (`item.clientId`, `review.clientId`) before calling a tenant-scoped tool or repository method — `POST /dashboard/content/:contentId/approve` (etc.) never accepts a caller-supplied `clientId`, only a content/review id, exactly like every other write in this platform. See ARCHITECTURE.md "Citadel Command Center dashboard" for the full design, and `apps/api/src/__tests__/dashboard.test.ts`'s "tenant isolation" and "invalid ids" suites for the proof: two clients' content/version histories never cross-contaminate through the dashboard's cross-tenant list/detail endpoints.
+
 ## Authentication & authorization
 
 **Current state (MVP): authentication-ready, not authentication-enforced.** `apps/api/src/middleware/auth.ts` implements a bearer-token gate (`API_AUTH_TOKEN`) that's active whenever that env var is set; it's unset (pass-through) by default for local development. `apps/api/src/middleware/actor.ts` resolves a `RequestActor` from request headers (`x-actor-id`, `x-actor-label`) for audit-logging purposes — this identifies who claims to be acting, it does not authenticate them. There is no user account system, role model, or per-client authorization check yet.
 
 **Before exposing this API beyond localhost:** set `API_AUTH_TOKEN`, and add real per-request identity + per-client authorization (e.g., "actor X may only act on clients they're assigned to") in front of the routes in `apps/api/src/routes/`. The `RequestActor`/audit-logging plumbing already threads an actor through every tool call, so adding real auth is additive, not a redesign.
+
+### Command Center authentication boundary (Phase 6)
+
+The dashboard (`/dashboard/*` in `apps/api`, and the static frontend served by `apps/dashboard`) introduces **no new authentication mechanism** — this was an explicit master-spec constraint ("do NOT build complex auth"). It sits behind the exact same middleware chain as every other route:
+
+```
+app.use(actorMiddleware);          // resolves RequestActor from x-actor-id/x-actor-label headers — identity claim, not verification
+app.use(createAuthMiddleware(env)); // bearer-token gate, active only when API_AUTH_TOKEN is set
+app.use('/dashboard', dashboardRouter(...));
+```
+
+Because that middleware runs before every router is mounted (`app.ts`), setting `API_AUTH_TOKEN` protects `/dashboard/*` exactly as it protects `/clients/*` — no dashboard-specific bypass exists. Proven directly in `apps/api/src/__tests__/dashboard.test.ts`'s "authentication boundary" test: a second `createApp()` instance built with `API_AUTH_TOKEN` set rejects an unauthenticated `GET /dashboard/overview` (401), rejects the wrong token (401), and accepts the correct one (200).
+
+**This is a boundary, not a finished access-control system, and the gap is deliberate rather than accidental — the master spec asked for a clean interface here, not a login system.** A single shared bearer token has no concept of "which staff member is this," no roles, no per-client restriction, and no session expiry. `x-actor-label` is self-reported by the caller (or the dashboard frontend, which sends whatever name a staff member typed into "Acting as") and is used only for the audit trail (`AuditLog.actor`, `ActivityLog`), never as an authorization decision — anyone holding the shared token can currently approve/reject/edit content or reviews for any client.
+
+**Before deploying the Command Center for real internal use, add:**
+
+1. **Real staff identity** — replace the shared bearer token with per-staff-member authentication (e.g. session cookies from a login page, or an OAuth/SSO flow against Citadel's own identity provider). `actorMiddleware` is the one seam to change: it should derive `RequestActor` from a verified session/token instead of trusting client-supplied headers.
+2. **Authorization, not just authentication** — a role model (e.g. "account manager," "admin") and, if needed, a "which clients can this staff member act on" restriction, checked in `dashboardRouter` before any write. Nothing here assumes a flat "any authenticated caller may do anything" model beyond the MVP; it's simply not built yet.
+3. **Session handling for the frontend** — `apps/dashboard`'s vanilla JS currently has no login flow at all; `getActorName()`/`setActorName()` (`apps/dashboard/public/app.js`) just remembers a typed name in `localStorage` for convenience, not identity. A real deployment needs the frontend to hold and send a real credential (session cookie or bearer token), not a self-reported label.
+4. **Transport security** — terminate TLS in front of both `apps/api` and `apps/dashboard` before either leaves localhost; neither app implements HTTPS itself.
+
+None of this requires touching the dashboard's business logic (`dashboardRouter`'s reads/writes, the approval/edit routes) — every action already flows through `req.actor` and the existing tenant-scoped tools, so swapping in real authentication and authorization is additive at the middleware layer, the same "additive, not a redesign" property the rest of this section describes for the base API.
 
 ## Input validation
 

@@ -10,6 +10,7 @@ import { clientsRouter } from './routes/clients.js';
 import { orchestratorRouter } from './routes/orchestrator.js';
 import { contentRouter } from './routes/content.js';
 import { openClawRouter } from './routes/openclaw.js';
+import { dashboardRouter } from './routes/dashboard.js';
 
 export function createApp(env: Env, container: Container): Express {
   const app = express();
@@ -24,6 +25,7 @@ export function createApp(env: Env, container: Container): Express {
   app.use('/orchestrator', orchestratorRouter(container.orchestrator));
   app.use('/content', contentRouter(container.toolRegistry));
   app.use('/openclaw', openClawRouter(container.openClawTools));
+  app.use('/dashboard', dashboardRouter(container.toolRegistry, env));
 
   app.use(errorHandler);
 

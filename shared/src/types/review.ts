@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VersionSourceSchema } from './version.js';
 
 /**
  * The Phase 5 review data model. A `Review` is ingested from a
@@ -61,6 +62,7 @@ export const ReviewResponseVersionSchema = z.object({
   qaPassed: z.boolean(),
   qaIssues: z.array(z.unknown()).default([]),
   createdBy: z.string(),
+  source: VersionSourceSchema.default('AI_GENERATED'),
   createdAt: z.string().or(z.date()),
 });
 export type ReviewResponseVersion = z.infer<typeof ReviewResponseVersionSchema>;
@@ -117,5 +119,13 @@ export const SaveReviewResponseInputSchema = z.object({
   createdBy: z.string().min(1),
   /** DRAFT when Brand QA passed, REVISION_REQUIRED when it didn't — mirrors content_save's initialStatus. */
   status: z.enum(['DRAFT', 'REVISION_REQUIRED']),
+  source: VersionSourceSchema.default('AI_GENERATED'),
 });
 export type SaveReviewResponseInput = z.infer<typeof SaveReviewResponseInputSchema>;
+
+/** A human edit of a review's current response, from the Command Center dashboard (Phase 6). Always lands the review at DRAFT — a human just produced the current text, ready for approval. */
+export const EditReviewResponseInputSchema = z.object({
+  responseText: z.string().min(1),
+  editedBy: z.string().min(1),
+});
+export type EditReviewResponseInput = z.infer<typeof EditReviewResponseInputSchema>;

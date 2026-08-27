@@ -40,4 +40,29 @@ export const seoAuditRepository = {
     }
     return toSeoAuditRecord(row);
   },
+
+  /**
+   * DASHBOARD-ONLY. Deliberately unscoped — see
+   * contentRepository.listAllForDashboard's doc comment for the same
+   * tenant-isolation exception applied here. SEO audits have no mutable
+   * dashboard actions (the master spec explicitly forbids letting the
+   * dashboard alter an audit result), so this is the only dashboard-only
+   * addition this repository needs.
+   */
+  async listAllForDashboard(options: { limit?: number } = {}): Promise<SeoAuditRecord[]> {
+    const rows = await prisma.seoAudit.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: options.limit,
+    });
+    return rows.map(toSeoAuditRecord);
+  },
+
+  /** DASHBOARD-ONLY. See listAllForDashboard's doc comment. */
+  async requireByIdGlobal(id: string): Promise<SeoAuditRecord> {
+    const row = await prisma.seoAudit.findUnique({ where: { id } });
+    if (!row) {
+      throw new ResourceNotFoundError('SeoAudit', id);
+    }
+    return toSeoAuditRecord(row);
+  },
 };

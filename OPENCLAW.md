@@ -50,6 +50,15 @@ Mapped onto what exists today: "NEW REVIEW" is a row `review_sync` (or, later, a
 
 This is documentation only, per the master spec ("Do not fully integrate OpenClaw yet... Document this architecture") — no OpenClaw SDK, webhook receiver, or scheduling mechanism is implemented in Phase 5.
 
+## Phase 6: the Command Center's AI Activity feed is OpenClaw-ready, not OpenClaw-integrated
+
+The Citadel Command Center dashboard (`apps/dashboard`, `apps/api/src/routes/dashboard.ts` — see ARCHITECTURE.md "Citadel Command Center dashboard") added a persisted `ActivityLog` table and `GET /dashboard/activity` feed so staff can see every AI generation, SEO audit, and review task the platform has run. Per the master spec, Phase 6 explicitly does NOT wire OpenClaw into this feed — but the shape was chosen so that connecting it later needs no schema change:
+
+- `ActivityLog`'s fields (`clientId`, `agent`, `task`, `modelProvider`, `executionTimeMs`, `success`, `errorCode`, `metadata`) describe "some agent ran some task for some client with this outcome" generically — they say nothing about HTTP, the Orchestrator, or any particular caller.
+- `activityLogRepository.record()` (`database/src/repositories/activity-log-repository.ts`) is a plain function, not coupled to `apps/api/src/logger.ts`'s three call sites. A future OpenClaw tool handler (see "Wiring up a real OpenClaw runtime" above) could call it directly after invoking a skill via `OpenClawToolDefinition.handler`, and that action would appear in the same dashboard feed, attributed to whichever `agent`/`task` name the handler passes in, with no dashboard code change.
+
+**Not implemented in Phase 6:** any actual call from an OpenClaw handler into `activityLogRepository.record()`, since no OpenClaw runtime is wired up yet at all (see "What exists today" above). This is documentation of the seam, not the seam being used.
+
 ## Model provider vs. OpenClaw
 
 Do not confuse the two integration points: **OpenClaw** is being evaluated as the *orchestration/runtime* layer for exposing Citadel AI's capabilities to other systems (chat surfaces, automations); the **model provider** (`integrations/models`) is Citadel AI's own reasoning engine (Claude today, swappable later — see [ARCHITECTURE.md](./ARCHITECTURE.md#model-provider-abstraction)). Neither depends on the other. OpenClaw could in principle be configured to use a different LLM for its own routing without changing which model Citadel AI's own agents use, and vice versa.
