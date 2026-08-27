@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { prisma, contentRepository, seoAuditRepository, activityLogRepository } from '@citadel/database';
-import type { SeoAuditResult } from '@citadel/shared';
+import { prisma, contentRepository, seoAuditRepository, websiteAuditRepository, activityLogRepository } from '@citadel/database';
+import type { SeoAuditResult, WebsiteAuditResult } from '@citadel/shared';
 import { loadEnv } from '../env.js';
 import { buildContainer } from '../container.js';
 import { createApp } from '../app.js';
@@ -66,6 +66,64 @@ describe('Citadel Command Center dashboard API', () => {
       overallScore: 75,
       result: { ...validSeoResult, url: 'https://example.com/', overallScore: 75 } as SeoAuditResult,
       agentVersion: 'seo-agent-v1',
+      modelProvider: 'mock',
+      modelUsed: 'mock-deterministic-v1',
+      ...overrides,
+    } as never);
+  }
+
+  const validWebsiteResult: Omit<WebsiteAuditResult, 'url' | 'overallScore'> = {
+    firstImpression: { score: 80, strengths: ['Company name is in the title.'], issues: [] },
+    conversion: { score: 60, strengths: [], issues: ['No quote/contact request form was found.'] },
+    customerJourney: { score: 70, strengths: [], frictionPoints: ['No obviously easy way to contact the business.'] },
+    content: { score: 75, strengths: [], issues: [] },
+    brand: { score: 100, issues: [] },
+    mobile: { tested: false, note: 'Mobile visual testing was not performed.' },
+    priorityRecommendations: [
+      {
+        title: 'Add a contact form',
+        description: 'The page has no quote/contact request form.',
+        category: 'CONVERSION',
+        priority: 'high',
+        impact: 'HIGH IMPACT',
+        effort: 'LOW',
+        evidenceRefs: ['conv-1'],
+      },
+    ],
+    quickWins: [
+      {
+        title: 'Add a contact form',
+        description: 'The page has no quote/contact request form.',
+        category: 'CONVERSION',
+        priority: 'high',
+        impact: 'HIGH IMPACT',
+        effort: 'LOW',
+        evidenceRefs: ['conv-1'],
+      },
+    ],
+    highImpactChanges: [
+      {
+        title: 'Add a contact form',
+        description: 'The page has no quote/contact request form.',
+        category: 'CONVERSION',
+        priority: 'high',
+        impact: 'HIGH IMPACT',
+        effort: 'LOW',
+        evidenceRefs: ['conv-1'],
+      },
+    ],
+    evidence: [{ id: 'conv-1', type: 'deterministic_rule', description: 'No quote/contact request form was found.' }],
+    modelUsed: 'mock-deterministic-v1',
+    providerUsed: 'mock',
+  };
+
+  async function createWebsiteAudit(clientId: string, overrides: Record<string, unknown> = {}) {
+    return websiteAuditRepository.create({
+      clientId,
+      url: 'https://example.com/',
+      overallScore: 68,
+      result: { ...validWebsiteResult, url: 'https://example.com/', overallScore: 68 } as WebsiteAuditResult,
+      agentVersion: 'website-agent-v1',
       modelProvider: 'mock',
       modelUsed: 'mock-deterministic-v1',
       ...overrides,
@@ -325,6 +383,47 @@ describe('Citadel Command Center dashboard API', () => {
 
     it('returns 404 for an invalid audit id', async () => {
       await request(app).get('/dashboard/seo/does-not-exist').expect(404);
+    });
+  });
+
+  describe('GET /dashboard/website-audits and /dashboard/website-audits/:auditId (Phase 7)', () => {
+    it('lists audits with client attribution and shows full detail on request', async () => {
+      const client = await createTestClient({ companyName: 'Website Display Co' });
+      const audit = await createWebsiteAudit(client.id);
+
+      const list = await request(app).get('/dashboard/website-audits').expect(200);
+      const listed = list.body.websiteAudits.find((a: { id: string }) => a.id === audit.id);
+      expect(listed).toBeDefined();
+      expect(listed.clientName).toBe('Website Display Co');
+
+      const detail = await request(app).get(`/dashboard/website-audits/${audit.id}`).expect(200);
+      expect(detail.body.websiteAudit.overallScore).toBe(68);
+      expect(detail.body.websiteAudit.result.firstImpression.score).toBe(80);
+      expect(detail.body.websiteAudit.result.conversion.issues).toHaveLength(1);
+      expect(detail.body.websiteAudit.result.customerJourney.frictionPoints).toHaveLength(1);
+      expect(detail.body.websiteAudit.result.mobile.tested).toBe(false);
+      expect(detail.body.websiteAudit.result.priorityRecommendations).toHaveLength(1);
+      expect(detail.body.websiteAudit.result.quickWins).toHaveLength(1);
+      expect(detail.body.websiteAudit.result.highImpactChanges).toHaveLength(1);
+      expect(detail.body.websiteAudit.result.evidence).toHaveLength(1);
+      expect(detail.body.client.id).toBe(client.id);
+
+      await cleanupClient(client.id);
+    });
+
+    it('returns 404 for an invalid audit id', async () => {
+      await request(app).get('/dashboard/website-audits/does-not-exist').expect(404);
+    });
+
+    it('appears in the overview\'s recentWebsiteAudits without affecting recentSeoAudits', async () => {
+      const client = await createTestClient({ companyName: 'Overview Website Audit Co' });
+      const audit = await createWebsiteAudit(client.id);
+
+      const overview = await request(app).get('/dashboard/overview').expect(200);
+      expect(Array.isArray(overview.body.recentWebsiteAudits)).toBe(true);
+      expect(overview.body.recentWebsiteAudits.some((a: { id: string }) => a.id === audit.id)).toBe(true);
+
+      await cleanupClient(client.id);
     });
   });
 

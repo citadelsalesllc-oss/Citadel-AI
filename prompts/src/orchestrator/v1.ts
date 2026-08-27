@@ -41,8 +41,8 @@ export const AGENT_KEYWORD_PATTERNS: ReadonlyArray<readonly [RegExp, SpecialistA
 export const DEFAULT_CONTENT_PLATFORM: ContentPlatformKeyword = 'facebook';
 export const GENERIC_CONTENT_REQUEST_PATTERN = /\bpost\b|\bcontent\b|\bcaption\b/i;
 
-/** The structured tasks the Orchestrator's task-based entry points (generateContent/runSeoAudit/runReviewTask) support — see AGENTS.md. */
-export const SUPPORTED_STRUCTURED_TASKS = ['create_social_post', 'seo_audit', 'review_analyze', 'review_response'] as const;
+/** The structured tasks the Orchestrator's task-based entry points (generateContent/runSeoAudit/runWebsiteAudit/runReviewTask) support — see AGENTS.md. */
+export const SUPPORTED_STRUCTURED_TASKS = ['create_social_post', 'seo_audit', 'website_audit', 'review_analyze', 'review_response'] as const;
 export type SupportedStructuredTask = (typeof SUPPORTED_STRUCTURED_TASKS)[number];
 
 /**
@@ -56,6 +56,7 @@ export type SupportedStructuredTask = (typeof SUPPORTED_STRUCTURED_TASKS)[number
 export const TASK_SKILL_MAP: Record<SupportedStructuredTask, string> = {
   create_social_post: 'create-social-post',
   seo_audit: 'seo-audit',
+  website_audit: 'website-audit',
   review_analyze: 'review-analyze',
   review_response: 'review-respond',
 };

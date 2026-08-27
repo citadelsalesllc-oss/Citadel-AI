@@ -11,6 +11,7 @@ import type {
   ContentItem as ContentItemRow,
   ContentVersion as ContentVersionRow,
   SeoAudit as SeoAuditRow,
+  WebsiteAudit as WebsiteAuditRow,
   Review as ReviewRow,
   ReviewResponseVersion as ReviewResponseVersionRow,
   AuditLog as AuditLogRow,
@@ -30,6 +31,8 @@ import type {
   ContentVersion,
   SeoAuditRecord,
   SeoAuditResult,
+  WebsiteAuditRecord,
+  WebsiteAuditResult,
   Review,
   ReviewResponseVersion,
   AuditLogEntry,
@@ -206,6 +209,20 @@ export function toSeoAuditRecord(row: SeoAuditRow): SeoAuditRecord {
     url: row.url,
     overallScore: row.overallScore,
     result: row.result as unknown as SeoAuditResult,
+    agentVersion: row.agentVersion,
+    modelProvider: row.modelProvider,
+    modelUsed: row.modelUsed,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toWebsiteAuditRecord(row: WebsiteAuditRow): WebsiteAuditRecord {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    url: row.url,
+    overallScore: row.overallScore,
+    result: row.result as unknown as WebsiteAuditResult,
     agentVersion: row.agentVersion,
     modelProvider: row.modelProvider,
     modelUsed: row.modelUsed,

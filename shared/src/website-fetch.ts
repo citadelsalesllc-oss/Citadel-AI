@@ -55,6 +55,19 @@ export interface WebsiteFetchResult {
   internalLinkCount: number;
   imageCount: number;
   imagesMissingAlt: number;
+  /**
+   * `tel:`/`mailto:` links, normalized to their raw destination (digits
+   * after `tel:`, address after `mailto:`) — deliberately separate from
+   * `links` above, which excludes both (SEO's link graph only cares about
+   * navigable pages). The Website Agent (Phase 7) needs these directly for
+   * click-to-call/click-to-email conversion-path detection.
+   */
+  telLinks: string[];
+  mailtoLinks: string[];
+  /** Count of `<form>` elements — a quote/contact-request form is a distinct conversion signal from a CTA link. */
+  formCount: number;
+  /** Phone-number-shaped substrings found in visible text (e.g. a number shown as plain text, not a `tel:` link), deduped to digits-only. */
+  phoneNumberMatches: string[];
   robotsTxt: RobotsTxtInfo;
   sitemap: SitemapInfo;
   fetchedAt: Date;

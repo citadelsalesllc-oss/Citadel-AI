@@ -49,6 +49,20 @@ export interface SeoAuditRequest {
 
 export type SeoAuditOrchestratorResult = { status: 'completed'; skillName: string; result: unknown };
 
+export interface WebsiteAuditRequest {
+  clientIdOrSlug: string;
+  /** Only 'website_audit' is supported — see prompts/orchestrator/v1.ts SUPPORTED_STRUCTURED_TASKS. */
+  task: string;
+  url: string;
+  targetService?: string;
+  targetLocation?: string;
+  userInstructions?: string;
+  actor: RequestActor;
+  requestId: string;
+}
+
+export type WebsiteAuditOrchestratorResult = { status: 'completed'; skillName: string; result: unknown };
+
 export interface ReviewTaskRequest {
   clientIdOrSlug: string;
   /** 'review_analyze' or 'review_response' — see prompts/orchestrator/v1.ts SUPPORTED_STRUCTURED_TASKS. */
@@ -193,6 +207,35 @@ export class Orchestrator {
    * skills/src/seo-audit/seo-audit.ts.
    */
   async runSeoAudit(request: SeoAuditRequest): Promise<SeoAuditOrchestratorResult> {
+    await this.identifyAndValidateClient(request.clientIdOrSlug, request.actor, request.requestId);
+    const skillName = this.resolveSkillForTask(request.task);
+
+    const result = await this.skillRegistry.run(
+      skillName,
+      {
+        clientIdOrSlug: request.clientIdOrSlug,
+        url: request.url,
+        targetService: request.targetService,
+        targetLocation: request.targetLocation,
+        userInstructions: request.userInstructions,
+      },
+      { actor: request.actor, requestId: request.requestId },
+    );
+
+    return { status: 'completed', skillName, result };
+  }
+
+  /**
+   * Structured entry point — POST /clients/:clientId/ai/website-audit
+   * (Phase 7). Identifies + validates the client exactly like
+   * runSeoAudit(), resolves 'website_audit' to the website-audit skill via
+   * the same task-to-skill lookup, and returns its result. The skill
+   * internally fetches the target URL, runs the Website Agent
+   * (marketing/conversion/UX analysis — distinct from the SEO Agent's
+   * search-visibility analysis, see ARCHITECTURE.md "Website Intelligence
+   * Agent"), and saves the audit — see skills/src/website-audit/website-audit.ts.
+   */
+  async runWebsiteAudit(request: WebsiteAuditRequest): Promise<WebsiteAuditOrchestratorResult> {
     await this.identifyAndValidateClient(request.clientIdOrSlug, request.actor, request.requestId);
     const skillName = this.resolveSkillForTask(request.task);
 

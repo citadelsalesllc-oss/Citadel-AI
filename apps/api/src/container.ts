@@ -7,6 +7,7 @@ import {
   ContentAgent,
   BrandQaAgent,
   SeoAgent,
+  WebsiteAgent,
   ReviewAnalysisAgent,
   ReviewResponseAgent,
   Orchestrator,
@@ -55,6 +56,7 @@ export function buildContainer(env: Env): Container {
   const contentAgent = new ContentAgent(modelProvider);
   const brandQaAgent = new BrandQaAgent();
   const seoAgent = new SeoAgent(modelProvider);
+  const websiteAgent = new WebsiteAgent(modelProvider);
   const reviewAnalysisAgent = new ReviewAnalysisAgent();
   const reviewResponseAgent = new ReviewResponseAgent(modelProvider);
   const agentRegistry = createDefaultAgentRegistry();
@@ -64,6 +66,7 @@ export function buildContainer(env: Env): Container {
     contentAgent,
     brandQaAgent,
     seoAgent,
+    websiteAgent,
     reviewAnalysisAgent,
     reviewResponseAgent,
   });

@@ -124,7 +124,7 @@ describe('POST /clients/:clientId/ai/generate', () => {
     const { slug, client } = await createClient();
     const res = await request(app)
       .post(`/clients/${slug}/ai/generate`)
-      .send({ task: 'website_audit', platform: 'FACEBOOK', topic: 'anything' })
+      .send({ task: 'not_a_real_task', platform: 'FACEBOOK', topic: 'anything' })
       .expect(501);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
     await prisma.client.delete({ where: { id: client.id } });

@@ -52,8 +52,9 @@ function extractEvidenceCatalog(text: string): EvidenceCatalogEntry[] {
  * considerably more machinery for no current benefit — see the
  * effort-scoping notes in ARCHITECTURE.md). Three structured-generation
  * callers exist today: the Content Agent (`content_generation_result`),
- * the SEO Agent (`seo_interpretation_result`), and the Review Response
- * Agent (`review_response_generation_result`).
+ * the SEO Agent (`seo_interpretation_result`), the Review Response Agent
+ * (`review_response_generation_result`), and the Website Agent
+ * (`website_interpretation_result`).
  */
 export class MockModelProvider implements ModelProvider {
   readonly name = 'mock';
@@ -69,6 +70,10 @@ export class MockModelProvider implements ModelProvider {
 
     if (params.responseSchema && name === 'review_response_generation_result') {
       return this.generateReviewResponse(params, userMessage);
+    }
+
+    if (params.responseSchema && name === 'website_interpretation_result') {
+      return this.generateWebsiteInterpretation(params, userMessage);
     }
 
     return this.generateContent(params, userMessage);
@@ -138,6 +143,47 @@ export class MockModelProvider implements ModelProvider {
       keyword_opportunities: keywordOpportunities,
       recommendations,
       summary: `Mock SEO audit summary for ${company}: ${evidence.length} finding(s) reviewed.`,
+    };
+    const text = JSON.stringify(structured);
+
+    return {
+      text,
+      structured,
+      model: 'mock-deterministic-v1',
+      provider: this.name,
+      stopReason: 'end_turn',
+      usage: {
+        inputTokens: Math.ceil((params.system.length + userMessage.length) / 4),
+        outputTokens: Math.ceil(text.length / 4),
+      },
+    };
+  }
+
+  private async generateWebsiteInterpretation(params: GenerateParams, userMessage: string): Promise<GenerateResult> {
+    const company = extractField(userMessage, 'Company') ?? 'the business';
+    const evidence = extractEvidenceCatalog(userMessage);
+
+    // Deterministic stand-in for "prioritize and explain the top
+    // findings": take the first few catalog entries and cite each one's
+    // real id, never a fabricated one — the same evidence-grounding rule
+    // a real model call is asked to follow (see prompts/src/website/v1.ts
+    // SAFETY_REQUIREMENTS). Category/priority/impact/effort cycle through
+    // fixed, deterministic values — the mock's job is a valid, gradeable
+    // shape, not realistic judgment.
+    const categories = ['CONVERSION', 'CONTENT', 'UX', 'CUSTOMER_JOURNEY'] as const;
+    const recommendations = evidence.slice(0, 3).map((entry, i) => ({
+      title: entry.description.length > 60 ? `${entry.description.slice(0, 57)}...` : entry.description,
+      description: `Audit finding: ${entry.description}`,
+      category: categories[i % categories.length],
+      priority: 'medium' as const,
+      impact: i === 0 ? ('HIGH IMPACT' as const) : ('MEDIUM IMPACT' as const),
+      effort: i === 0 ? ('LOW' as const) : ('MEDIUM' as const),
+      evidence_refs: [entry.id],
+    }));
+
+    const structured = {
+      recommendations,
+      summary: `Mock website audit summary for ${company}: ${evidence.length} finding(s) reviewed.`,
     };
     const text = JSON.stringify(structured);
 

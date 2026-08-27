@@ -13,6 +13,7 @@ export type { WebSearchOutput, WebSearchResultItem } from './web-search-tool.js'
 export { createWebsiteFetchTool, createWebsiteAnalyzeTool } from './website-tools.js';
 export type { WebsiteAnalysis } from './website-tools.js';
 export { seoAuditSaveTool, seoAuditHistoryTool } from './seo-tools.js';
+export { websiteAuditSaveTool, websiteAuditHistoryTool } from './website-audit-tools.js';
 export {
   createReviewSyncTool,
   reviewLookupTool,

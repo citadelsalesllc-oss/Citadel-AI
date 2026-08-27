@@ -22,8 +22,11 @@ const FULL_PAGE_HTML = `<!doctype html>
   <p>We install and pump septic systems for local homeowners. Call now for a free quote.</p>
   <a href="/services">Services</a>
   <a href="https://other-site.example/partner">Partner</a>
+  <a href="tel:+12085550142">Call (208) 555-0142</a>
+  <a href="mailto:info@example.com?subject=Quote">Email Us</a>
   <img src="/truck.jpg" alt="Septic truck">
   <img src="/logo.png">
+  <form action="/quote"><input name="name"></form>
 </body>
 </html>`;
 
@@ -89,6 +92,30 @@ describe('WebsiteFetchAdapter', () => {
     expect(result.imageCount).toBe(2);
     expect(result.imagesMissingAlt).toBe(1);
     expect(result.wordCount).toBeGreaterThan(0);
+  });
+
+  it('extracts tel:/mailto: links, form count, and phone-number-shaped text separately from the SEO link graph', async () => {
+    vi.stubGlobal('fetch', mockFetchImpl({}));
+    const adapter = new WebsiteFetchAdapter();
+    const result = await adapter.fetch('https://example.com/');
+
+    expect(result.telLinks).toEqual(['+12085550142']);
+    expect(result.mailtoLinks).toEqual(['info@example.com']);
+    expect(result.formCount).toBe(1);
+    expect(result.phoneNumberMatches).toContain('2085550142');
+    // tel:/mailto: are excluded from the navigable-link graph, not counted as internal/external links
+    expect(result.links.some((l) => l.href.startsWith('tel:') || l.href.startsWith('mailto:'))).toBe(false);
+  });
+
+  it('reports zero forms and empty contact links when none are present', async () => {
+    const html = '<html><body><h1>No contact info</h1><p>Nothing here.</p></body></html>';
+    vi.stubGlobal('fetch', mockFetchImpl({ page: (_url) => new Response(html, { status: 200, headers: jsonHeaders() }) }));
+    const adapter = new WebsiteFetchAdapter();
+    const result = await adapter.fetch('https://example.com/');
+    expect(result.formCount).toBe(0);
+    expect(result.telLinks).toEqual([]);
+    expect(result.mailtoLinks).toEqual([]);
+    expect(result.phoneNumberMatches).toEqual([]);
   });
 
   it('reports robots.txt availability and a blanket-disallow rule', async () => {

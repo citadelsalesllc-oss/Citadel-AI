@@ -74,6 +74,34 @@ export async function logSeoAuditEvent(entry: SeoAuditLogEntry): Promise<void> {
   });
 }
 
+/** The website-audit analogue of SeoAuditLogEntry (Phase 7) — same no-secrets guarantee, same shape, kept as its own `type`/`task` so the AI Activity feed can distinguish a website audit from an SEO audit. */
+export interface WebsiteAuditLogEntry {
+  requestId: string;
+  clientId: string;
+  agent: string;
+  task: string;
+  modelProvider: string;
+  executionTimeMs: number;
+  success: boolean;
+  overallScore?: number;
+  errorCode?: string;
+}
+
+export async function logWebsiteAuditEvent(entry: WebsiteAuditLogEntry): Promise<void> {
+  console.log(JSON.stringify({ type: 'website_audit', timestamp: new Date().toISOString(), ...entry }));
+  await persist({
+    clientId: entry.clientId,
+    requestId: entry.requestId,
+    agent: entry.agent,
+    task: entry.task,
+    modelProvider: entry.modelProvider,
+    executionTimeMs: entry.executionTimeMs,
+    success: entry.success,
+    errorCode: entry.errorCode ?? null,
+    metadata: { overallScore: entry.overallScore },
+  });
+}
+
 /** The review-analyze/review-respond analogue of GenerationLogEntry — same no-secrets guarantee, and never logs/persists review/reviewer text, only ids and outcome metadata. */
 export interface ReviewLogEntry {
   requestId: string;

@@ -103,6 +103,17 @@ h2 {
   margin: 24px 0 10px;
 }
 
+.panel-subhead {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+.panel-subhead:first-child {
+  margin-top: 0;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);

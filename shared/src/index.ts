@@ -5,6 +5,7 @@ export * from './types/content.js';
 export * from './types/audit.js';
 export * from './types/activity.js';
 export * from './types/seo-audit.js';
+export * from './types/website-audit.js';
 export * from './types/review.js';
 export * from './model-provider.js';
 export * from './website-fetch.js';

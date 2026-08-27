@@ -18,6 +18,8 @@ Tools are the only way agents touch real data or external systems — they never
 | `website_analyze` | `website_fetch` + basic on-page SEO heuristics | Real |
 | `seo_audit_save` | Postgres, persists a completed `SeoAuditResult`, audit-logged | Real |
 | `seo_audit_history` | Postgres, lists a client's past audits newest-first, optionally filtered to one URL | Real |
+| `website_audit_save` | Postgres, persists a completed `WebsiteAuditResult`, audit-logged | Real |
+| `website_audit_history` | Postgres, lists a client's past website audits newest-first, optionally filtered to one URL | Real |
 | `review_sync` | `ReviewProvider` (mock by default) — pulls reviews into Postgres, idempotent, audit-logged | Real gate; mock provider by default |
 | `review_lookup` | Postgres (`reviewRepository`) — lists a client's already-synced reviews, optional status filter | Real |
 | `review_get` | Postgres, tenant-scoped single-review fetch | Real |
@@ -40,6 +42,10 @@ Tools are the only way agents touch real data or external systems — they never
 `website_fetch` never pretends a page was retrieved when it wasn't: a genuinely unreachable target, a timeout, a non-HTML response, or an oversized body all throw (`WebsiteUnreachableError`/`WebsiteFetchTimeoutError`/`UnsupportedContentTypeError`/`WebsiteContentTooLargeError`), while an HTTP error status from the target itself (404, 500...) is returned as data — it's a real, analyzable finding, not a fetch failure. See ARCHITECTURE.md "SEO analysis pipeline" for the full behavior, including why fetching `robots.txt`/`sitemap.xml` for the client's own, explicitly-audited URL isn't the "web crawler" the master spec says not to build yet.
 
 `seo_audit_save` never gates on a pass/fail the way `content_save` gates on Brand QA — every completed SEO audit is persisted, good or bad, so `seo_audit_history` can support before/after comparison as a client's site improves over time.
+
+## Website audit tools in detail (Phase 7)
+
+`website_audit_save` and `website_audit_history` are the Website Agent's equivalents of `seo_audit_save`/`seo_audit_history`, with the same "never gates on pass/fail" behavior: every completed `WebsiteAuditResult` is persisted regardless of score, so `website_audit_history` can support before/after comparison as a client's conversion effectiveness improves over time. The `website-audit` skill fetches the page with the same `website_fetch` tool the `seo-audit` skill uses — there is no separate "website fetch for marketing purposes" tool — see ARCHITECTURE.md "Website Intelligence pipeline" for why the SEO and Website audits share ingestion but diverge in what they check for.
 
 ## Review tools in detail (Phase 5)
 

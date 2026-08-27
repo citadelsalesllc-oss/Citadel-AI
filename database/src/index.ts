@@ -10,6 +10,7 @@ export { faqRepository } from './repositories/faq-repository.js';
 export { marketingNoteRepository } from './repositories/marketing-note-repository.js';
 export { contentRepository } from './repositories/content-repository.js';
 export { seoAuditRepository } from './repositories/seo-audit-repository.js';
+export { websiteAuditRepository } from './repositories/website-audit-repository.js';
 export { reviewRepository } from './repositories/review-repository.js';
 export { auditRepository } from './repositories/audit-repository.js';
 export { activityLogRepository } from './repositories/activity-log-repository.js';

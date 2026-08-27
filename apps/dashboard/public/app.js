@@ -110,6 +110,8 @@ const routes = [
   { pattern: /^#\/content\/([^/]+)$/, handler: renderContentDetail, tab: null },
   { pattern: /^#\/seo$/, handler: renderSeoList, tab: 'seo' },
   { pattern: /^#\/seo\/([^/]+)$/, handler: renderSeoDetail, tab: 'seo' },
+  { pattern: /^#\/website$/, handler: renderWebsiteAuditList, tab: 'website' },
+  { pattern: /^#\/website\/([^/]+)$/, handler: renderWebsiteAuditDetail, tab: 'website' },
   { pattern: /^#\/reviews$/, handler: renderReviewsList, tab: 'reviews' },
   { pattern: /^#\/reviews\/([^/]+)$/, handler: renderReviewDetail, tab: 'reviews' },
   { pattern: /^#\/activity$/, handler: renderActivity, tab: 'activity' },
@@ -174,6 +176,9 @@ async function renderOverview() {
 
     <h2>Recent SEO Audits</h2>
     ${panel(renderSeoTable(data.recentSeoAudits))}
+
+    <h2>Recent Website Audits</h2>
+    ${panel(renderWebsiteAuditTable(data.recentWebsiteAudits))}
 
     <h2>Recent Reviews</h2>
     ${panel(renderReviewsTable(data.recentReviews))}
@@ -599,6 +604,111 @@ async function renderSeoDetail(auditId) {
 
     <h2>Keyword Opportunities</h2>${panel(keywordsHtml)}
     <h2>Recommendations</h2>${panel(recsHtml)}
+    <h2>Evidence</h2>${panel(evidenceHtml)}
+  `;
+}
+
+// --- Website Audits (Phase 7) ----------------------------------------------------
+
+function renderWebsiteAuditTable(audits) {
+  if (!audits || audits.length === 0) return '<p class="muted">No website audits yet.</p>';
+  const rows = audits
+    .map(
+      (a) => `
+      <tr class="clickable" data-href="#/website/${esc(a.id)}">
+        <td>${esc(a.clientName || a.clientId)}</td>
+        <td>${esc(a.url)}</td>
+        <td>${a.overallScore}</td>
+        <td>${fmtDate(a.createdAt)}</td>
+      </tr>`,
+    )
+    .join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Client</th><th>URL</th><th>Score</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function renderWebsiteAuditList() {
+  const data = await api('/dashboard/website-audits');
+  root.innerHTML = `
+    <h1>Website Audits</h1>
+    <p class="muted">Marketing effectiveness and conversion — how well each site turns visitors into customers. Distinct from SEO (search visibility).</p>
+    ${data.websiteAudits.length === 0 ? notice('warn', 'No website audits have been run yet.') : panel(renderWebsiteAuditTable(data.websiteAudits))}
+  `;
+  wireClickableRows();
+}
+
+/**
+ * strengths+issues categories (first impression, conversion, content) share
+ * this rendering; customer journey and brand call it with the fields they
+ * actually have. Brand's category object has no `strengths` key at all
+ * (see shared/types/website-audit.ts's WebsiteBrandResultSchema) — checked
+ * with `'strengths' in category` rather than truthiness, so an empty-but-
+ * present strengths array (a real "nothing found" result) still renders
+ * its heading, while Brand's genuinely absent field renders none at all.
+ */
+function websiteCategoryPanel(name, category, { issuesLabel = 'Issues', issuesField = 'issues' } = {}) {
+  const hasStrengths = 'strengths' in category;
+  const issues = category[issuesField] || [];
+  const strengthsHtml = (category.strengths || []).length
+    ? `<ul>${category.strengths.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
+    : '<p class="muted">None noted.</p>';
+  const issuesHtml = issues.length ? `<ul>${issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p class="muted">None found.</p>';
+  return `<div class="panel"><strong>${esc(name)}</strong> — score ${category.score}/100
+    ${hasStrengths ? `<h3 class="panel-subhead">Strengths</h3>${strengthsHtml}` : ''}
+    <h3 class="panel-subhead">${esc(issuesLabel)}</h3>${issuesHtml}
+  </div>`;
+}
+
+function impactBadgeKind(impact) {
+  if (impact === 'HIGH IMPACT') return 'danger';
+  if (impact === 'MEDIUM IMPACT') return 'warn';
+  return 'neutral';
+}
+
+async function renderWebsiteAuditDetail(auditId) {
+  const data = await api(`/dashboard/website-audits/${encodeURIComponent(auditId)}`);
+  const audit = data.websiteAudit;
+  const result = audit.result;
+
+  function recommendationList(recs) {
+    if (!recs.length) return '<p class="muted">None.</p>';
+    return `<ul>${recs
+      .map(
+        (r) => `<li>
+          <span class="badge badge-${impactBadgeKind(r.impact)}">${esc(r.impact)}</span>
+          <span class="badge badge-neutral">${esc(r.category)}</span>
+          <span class="badge badge-neutral">effort: ${esc(r.effort)}</span>
+          <strong>${esc(r.title)}</strong> — ${esc(r.description)}
+        </li>`,
+      )
+      .join('')}</ul>`;
+  }
+
+  const evidenceHtml = result.evidence.length
+    ? `<ul>${result.evidence.map((e) => `<li><code>${esc(e.id)}</code> (${esc(e.type)}) — ${esc(e.description)}</li>`).join('')}</ul>`
+    : '<p class="muted">No evidence recorded.</p>';
+
+  root.innerHTML = `
+    <a class="back-link" href="#/website">&larr; All website audits</a>
+    <h1>Website Audit — ${esc(data.client.companyName)}</h1>
+    ${panel(`<dl class="kv">
+      <dt>URL</dt><dd>${esc(audit.url)}</dd>
+      <dt>Overall score</dt><dd>${audit.overallScore}/100</dd>
+      <dt>Date</dt><dd>${fmtDate(audit.createdAt)}</dd>
+      <dt>Model</dt><dd>${esc(audit.modelProvider)} / ${esc(audit.modelUsed)}</dd>
+    </dl>`)}
+
+    ${notice('warn', `Mobile: ${result.mobile.note}`)}
+
+    <h2>Categories</h2>
+    ${websiteCategoryPanel('First Impression', result.firstImpression)}
+    ${websiteCategoryPanel('Conversion', result.conversion)}
+    ${websiteCategoryPanel('Customer Journey', result.customerJourney, { issuesLabel: 'Friction Points', issuesField: 'frictionPoints' })}
+    ${websiteCategoryPanel('Content', result.content)}
+    ${websiteCategoryPanel('Brand', result.brand)}
+
+    <h2>Quick Wins</h2>${panel(recommendationList(result.quickWins))}
+    <h2>High-Impact Changes</h2>${panel(recommendationList(result.highImpactChanges))}
+    <h2>All Recommendations</h2>${panel(recommendationList(result.priorityRecommendations))}
     <h2>Evidence</h2>${panel(evidenceHtml)}
   `;
 }

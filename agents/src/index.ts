@@ -12,6 +12,6 @@ export {
   type ReviewResponseAgentInput,
   type ReviewResponseAgentOutput,
 } from './reviews/index.js';
-export { websiteAgent } from './website/index.js';
+export { websiteAgent, WebsiteAgent, WEBSITE_AGENT_VERSION, type WebsiteAgentInput, type WebsiteAgentOutput } from './website/index.js';
 export { analyticsAgent } from './analytics/index.js';
 export { createStubAgent } from './stub-agent.js';

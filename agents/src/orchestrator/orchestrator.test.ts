@@ -57,6 +57,19 @@ function buildSeoAuditSkillRegistry(handler?: (input: unknown) => unknown) {
   return registry;
 }
 
+function buildWebsiteAuditSkillRegistry(handler?: (input: unknown) => unknown) {
+  const registry = new SkillRegistry();
+  registry.register({
+    name: 'website-audit',
+    description: 'fake',
+    inputSchema: z.object({}).passthrough(),
+    async run(input) {
+      return handler ? handler(input) : { auditRecord: { id: 'website_audit_1' }, audit: { overallScore: 65 } };
+    },
+  });
+  return registry;
+}
+
 function buildReviewSkillRegistry(skillName: 'review-analyze' | 'review-respond', handler?: (input: unknown) => unknown) {
   const registry = new SkillRegistry();
   registry.register({
@@ -186,7 +199,7 @@ describe('Orchestrator', () => {
       await expect(
         orchestrator.generateContent({
           clientIdOrSlug: client.core.slug,
-          task: 'website_audit',
+          task: 'not_a_real_task',
           platform: 'FACEBOOK',
           topic: 'anything',
           actor: ACTOR,
@@ -280,7 +293,7 @@ describe('Orchestrator', () => {
       await expect(
         orchestrator.runSeoAudit({
           clientIdOrSlug: client.core.slug,
-          task: 'website_audit',
+          task: 'not_a_real_task',
           url: 'https://example.com/',
           actor: ACTOR,
           requestId: 'req-12',
@@ -339,6 +352,116 @@ describe('Orchestrator', () => {
     });
   });
 
+  describe('runWebsiteAudit (structured entry point, Phase 7)', () => {
+    it('identifies the client and delegates to the website-audit skill', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ auditRecord: { id: 'website_audit_1' }, audit: { overallScore: 58 } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildWebsiteAuditSkillRegistry(skillRun), new AgentRegistry());
+
+      const outcome = await orchestrator.runWebsiteAudit({
+        clientIdOrSlug: client.core.slug,
+        task: 'website_audit',
+        url: 'https://example.com/',
+        actor: ACTOR,
+        requestId: 'req-23',
+      });
+
+      expect(outcome.status).toBe('completed');
+      expect(outcome.skillName).toBe('website-audit');
+      expect(skillRun).toHaveBeenCalledWith(
+        expect.objectContaining({ clientIdOrSlug: client.core.slug, url: 'https://example.com/' }),
+      );
+    });
+
+    it('passes through optional target service/location/instructions', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ auditRecord: { id: 'website_audit_1' }, audit: { overallScore: 58 } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildWebsiteAuditSkillRegistry(skillRun), new AgentRegistry());
+
+      await orchestrator.runWebsiteAudit({
+        clientIdOrSlug: client.core.slug,
+        task: 'website_audit',
+        url: 'https://example.com/',
+        targetService: 'widget installation',
+        targetLocation: "Coeur d'Alene",
+        userInstructions: 'focus on the homepage',
+        actor: ACTOR,
+        requestId: 'req-24',
+      });
+
+      expect(skillRun).toHaveBeenCalledWith(
+        expect.objectContaining({ targetService: 'widget installation', targetLocation: "Coeur d'Alene", userInstructions: 'focus on the homepage' }),
+      );
+    });
+
+    it('reports an unsupported task honestly instead of guessing a skill', async () => {
+      const client = makeTestClient();
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildWebsiteAuditSkillRegistry(), new AgentRegistry());
+
+      await expect(
+        orchestrator.runWebsiteAudit({
+          clientIdOrSlug: client.core.slug,
+          task: 'not_a_real_task',
+          url: 'https://example.com/',
+          actor: ACTOR,
+          requestId: 'req-25',
+        }),
+      ).rejects.toThrow(NotImplementedError);
+    });
+
+    it('throws ClientNotFoundError for an invalid client instead of inventing one', async () => {
+      const client = makeTestClient();
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildWebsiteAuditSkillRegistry(), new AgentRegistry());
+
+      await expect(
+        orchestrator.runWebsiteAudit({
+          clientIdOrSlug: 'does-not-exist',
+          task: 'website_audit',
+          url: 'https://example.com/',
+          actor: ACTOR,
+          requestId: 'req-26',
+        }),
+      ).rejects.toThrow(ClientNotFoundError);
+    });
+  });
+
+  describe('regression: create_social_post, seo_audit are unaffected by website_audit routing', () => {
+    it('still resolves create_social_post to the create-social-post skill', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ contentItem: { id: 'c1' }, qa: { passed: true, issues: [], warnings: [] } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSkillRegistry(skillRun), new AgentRegistry());
+
+      const outcome = await orchestrator.generateContent({
+        clientIdOrSlug: client.core.slug,
+        task: 'create_social_post',
+        platform: 'FACEBOOK',
+        topic: 'a septic installation',
+        actor: ACTOR,
+        requestId: 'req-27',
+      });
+
+      expect(outcome.status).toBe('completed');
+      expect(outcome.skillName).toBe('create-social-post');
+    });
+
+    it('still resolves seo_audit to the seo-audit skill', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ auditRecord: { id: 'audit_1' }, audit: { overallScore: 80 } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSeoAuditSkillRegistry(skillRun), new AgentRegistry());
+
+      const outcome = await orchestrator.runSeoAudit({
+        clientIdOrSlug: client.core.slug,
+        task: 'seo_audit',
+        url: 'https://example.com/',
+        actor: ACTOR,
+        requestId: 'req-28',
+      });
+
+      expect(outcome.status).toBe('completed');
+      expect(outcome.skillName).toBe('seo-audit');
+    });
+  });
+
   describe('runReviewTask (structured entry point, Phase 5)', () => {
     it('identifies the client and delegates review_analyze to the review-analyze skill', async () => {
       const client = makeTestClient();
@@ -390,7 +513,7 @@ describe('Orchestrator', () => {
       await expect(
         orchestrator.runReviewTask({
           clientIdOrSlug: client.core.slug,
-          task: 'website_audit',
+          task: 'not_a_real_task',
           reviewId: 'review_1',
           actor: ACTOR,
           requestId: 'req-18',

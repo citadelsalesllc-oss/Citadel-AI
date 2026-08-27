@@ -11,6 +11,7 @@ import {
   faqRepository,
   marketingNoteRepository,
   seoAuditRepository,
+  websiteAuditRepository,
   reviewRepository,
   getClientContext,
 } from '@citadel/database';
@@ -33,10 +34,10 @@ import {
   type ToolRegistry,
 } from '@citadel/shared';
 import type { Orchestrator } from '@citadel/agents';
-import type { CreateSocialPostOutput, SeoAuditOutput, ReviewAnalyzeOutput, ReviewRespondOutput } from '@citadel/skills';
+import type { CreateSocialPostOutput, SeoAuditOutput, WebsiteAuditOutput, ReviewAnalyzeOutput, ReviewRespondOutput } from '@citadel/skills';
 import { z } from 'zod';
 import { asyncHandler } from './async-handler.js';
-import { logGenerationEvent, logSeoAuditEvent, logReviewEvent } from '../logger.js';
+import { logGenerationEvent, logSeoAuditEvent, logWebsiteAuditEvent, logReviewEvent } from '../logger.js';
 
 /**
  * All client knowledge sub-resources (services, service areas, brand
@@ -492,6 +493,105 @@ export function clientsRouter(orchestrator: Orchestrator, toolRegistry: ToolRegi
       const url = typeof req.query.url === 'string' ? req.query.url : undefined;
       const seoAudits = await seoAuditRepository.listByClient(client.id, url);
       res.json({ seoAudits });
+    }),
+  );
+
+  // --- Website audit (Phase 7) ----------------------------------------------------------
+  // USER REQUEST -> ORCHESTRATOR -> CLIENT CONTEXT -> WEBSITE FETCH ->
+  // WEBSITE AGENT (deterministic marketing/conversion/UX/customer-journey/
+  // brand checks + LLM-prioritized recommendations) -> SAVE -> RETURN
+  // RESULT. Distinct from SEO audit: this answers "how effectively does
+  // this website turn visitors into customers?", not "how well does it
+  // rank?" — see ARCHITECTURE.md "Website Intelligence Agent." See
+  // agents/src/orchestrator/orchestrator.ts's runWebsiteAudit() for the
+  // actual pipeline; this route only translates between HTTP and that
+  // call, and logs the observability event either way.
+
+  const WebsiteAuditBodySchema = z.object({
+    url: z.string().url(),
+    target_service: z.string().optional(),
+    target_location: z.string().optional(),
+    instructions: z.string().optional(),
+  });
+
+  router.post(
+    '/:idOrSlug/ai/website-audit',
+    asyncHandler(async (req, res) => {
+      const body = WebsiteAuditBodySchema.parse(req.body);
+      const clientIdOrSlug = req.params.idOrSlug as string;
+      const startedAt = Date.now();
+
+      try {
+        const outcome = await orchestrator.runWebsiteAudit({
+          clientIdOrSlug,
+          task: 'website_audit',
+          url: body.url,
+          targetService: body.target_service,
+          targetLocation: body.target_location,
+          userInstructions: body.instructions,
+          actor: req.actor,
+          requestId: req.requestId,
+        });
+
+        const result = outcome.result as WebsiteAuditOutput;
+        const { audit, auditRecord } = result;
+
+        await logWebsiteAuditEvent({
+          requestId: req.requestId,
+          clientId: auditRecord.clientId,
+          agent: outcome.skillName,
+          task: 'website_audit',
+          modelProvider: audit.providerUsed,
+          executionTimeMs: Date.now() - startedAt,
+          success: true,
+          overallScore: audit.overallScore,
+        });
+
+        res.json({
+          audit: {
+            url: audit.url,
+            overall_score: audit.overallScore,
+            first_impression: audit.firstImpression,
+            conversion: audit.conversion,
+            customer_journey: audit.customerJourney,
+            content: audit.content,
+            brand: audit.brand,
+            mobile: audit.mobile,
+            quick_wins: audit.quickWins,
+            high_impact_changes: audit.highImpactChanges,
+          },
+          evidence: audit.evidence,
+          recommendations: audit.priorityRecommendations,
+          clientId: auditRecord.clientId,
+          auditId: auditRecord.id,
+          agentUsed: outcome.skillName,
+          modelProvider: { name: audit.providerUsed, model: audit.modelUsed },
+          usage: audit.usage ?? null,
+          executionTimeMs: Date.now() - startedAt,
+        });
+      } catch (error) {
+        await logWebsiteAuditEvent({
+          requestId: req.requestId,
+          clientId: clientIdOrSlug,
+          agent: 'website-agent',
+          task: 'website_audit',
+          modelProvider: modelProviderName,
+          executionTimeMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof CitadelError ? error.code : 'UNKNOWN_ERROR',
+        });
+        throw error;
+      }
+    }),
+  );
+
+  router.get(
+    '/:idOrSlug/website-audits',
+    asyncHandler(async (req, res) => {
+      const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
+      const url = typeof req.query.url === 'string' ? req.query.url : undefined;
+      const websiteAudits = await websiteAuditRepository.listByClient(client.id, url);
+      res.json({ websiteAudits });
     }),
   );
 

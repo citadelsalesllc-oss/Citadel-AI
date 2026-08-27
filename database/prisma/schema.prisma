@@ -63,6 +63,7 @@ model Client {
   marketingNotes  MarketingNote[]
   contentItems    ContentItem[]
   seoAudits       SeoAudit[]
+  websiteAudits   WebsiteAudit[]
   reviews         Review[]
   auditLogs       AuditLog[]
   activityLogs    ActivityLog[]
@@ -336,6 +337,34 @@ model SeoAudit {
 
   @@index([clientId, url, createdAt])
   @@map("seo_audits")
+}
+
+/// Phase 7 — one row per website_audit run, mirroring SeoAudit exactly
+/// (same append-only "never overwrite a past audit" rationale, so a
+/// client's website can be tracked over time — see the Website Agent's
+/// doc comments in agents/src/website/). `result` is the full
+/// WebsiteAuditResult (first impression / conversion / customer journey /
+/// content / brand / mobile-disclosure scorecards + prioritized
+/// recommendations + evidence catalog), stored as-is; the Command Center
+/// dashboard displays it read-only — see ARCHITECTURE.md "Website
+/// Intelligence Agent."
+model WebsiteAudit {
+  id       String @id @default(cuid())
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  url      String
+
+  overallScore Int
+  result       Json
+
+  agentVersion  String
+  modelProvider String
+  modelUsed     String
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, url, createdAt])
+  @@map("website_audits")
 }
 
 enum ReviewSource {

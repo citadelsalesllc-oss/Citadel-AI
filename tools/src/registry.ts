@@ -17,6 +17,7 @@ import { analyticsLookupTool } from './stub-data-tools.js';
 import { webSearchTool } from './web-search-tool.js';
 import { createWebsiteFetchTool, createWebsiteAnalyzeTool } from './website-tools.js';
 import { seoAuditSaveTool, seoAuditHistoryTool } from './seo-tools.js';
+import { websiteAuditSaveTool, websiteAuditHistoryTool } from './website-audit-tools.js';
 import {
   createReviewSyncTool,
   reviewLookupTool,
@@ -55,6 +56,8 @@ export function createToolRegistry(options: ToolRegistryOptions = {}): ToolRegis
   registry.register(createWebsiteAnalyzeTool(websiteFetchAdapter));
   registry.register(seoAuditSaveTool);
   registry.register(seoAuditHistoryTool);
+  registry.register(websiteAuditSaveTool);
+  registry.register(websiteAuditHistoryTool);
   registry.register(createReviewSyncTool(reviewProvider));
   registry.register(reviewLookupTool);
   registry.register(reviewGetTool);

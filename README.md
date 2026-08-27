@@ -23,7 +23,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the system is put together, [AG
 
 **Phase 6 (Citadel Command Center):** an internal staff dashboard — not billing, not a client portal — for reviewing and approving everything the specialist agents above have produced, across every client at once. `apps/dashboard` serves a vanilla HTML/CSS/JS single-page app calling a new `/dashboard/*` JSON API in `apps/api` (`apps/api/src/routes/dashboard.ts`), which reuses the existing repositories and tenant-scoped approval tools rather than introducing new business logic. Covers an Overview (real counts, never fabricated), a Clients list/detail (reusing the Phase 2 knowledge model), a unified Approval Center for content, a Content browser, SEO audit and Review displays (including live escalation analysis), an AI Activity feed newly persisted to the database (`ActivityLog`, previously only console-logged), and a System Status page that reports real component health. Every human edit of AI-generated content or a review response appends a new version (`ContentVersion`/`ReviewResponseVersion`, `source: HUMAN_EDIT`) rather than overwriting the original — the AI-generated version is always still there. No new AI capability, external integration, or auto-publishing was added; the dashboard only makes existing state visible and actionable by a human. See [ARCHITECTURE.md](./ARCHITECTURE.md#citadel-command-center-dashboard-phase-6) and [SECURITY.md](./SECURITY.md#command-center-authentication-boundary-phase-6).
 
-Strategy, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
+**Phase 7 (Website Intelligence Agent):** the fifth complete specialist — the Website Agent audits a client's webpage for marketing effectiveness and conversion via `POST /clients/:clientId/ai/website-audit`, reusing the same real website fetch (`WebsiteFetchAdapter`) the SEO Agent uses but asking a different question: not "can this page be found," but "does this page turn a visitor into a customer." Five deterministic check categories (first impression, conversion, customer journey, content, brand — `agents/src/website/checks.ts`, which calls directly into the SEO Agent's own conversion checks rather than re-detecting the same evidence) feed an evidence catalog to the model for LLM-prioritized, client-friendly recommendations, each required to cite real evidence and to use qualitative impact levels (never a fabricated percentage). Mobile is honestly disclosed as untested rather than fabricated, since the fetch pipeline never renders a page. Audits are persisted (`WebsiteAudit`, never overwritten) so a client's conversion effectiveness can be tracked over time, and the Command Center dashboard gained a Website tab alongside SEO. See [ARCHITECTURE.md](./ARCHITECTURE.md#website-intelligence-pipeline-phase-7).
+
+Strategy and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
 
 ## Prerequisites
 
@@ -107,6 +109,16 @@ curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/reviews/$REVIEW
 
 `analyze` returns `{ analysis: { rating, classification, positive_points, negative_points, mentioned_services, mentioned_locations, concerns, escalation_needed, evidence }, reviewId, clientId, agentUsed }` — fully deterministic, no model call. `respond` returns `{ response, qaResult, escalationNeeded, reviewId, status, agentUsed, modelProvider, usage }` — `status` is `DRAFT` if Brand QA passed or `REVISION_REQUIRED` if it didn't, exactly like content generation; `GET /clients/cda-septic-systems/reviews/$REVIEW_ID` returns the review plus its full response-draft history (see [ARCHITECTURE.md](./ARCHITECTURE.md#review-intelligence-pipeline-phase-5)).
 
+### Or audit a client's website for marketing/conversion effectiveness (Phase 7)
+
+```bash
+curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/website-audit \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/"}'
+```
+
+Returns `{ audit, evidence, recommendations, quick_wins, high_impact_changes, clientId, auditId, agentUsed, modelProvider, usage, executionTimeMs }` — `audit` contains `overall_score` plus `first_impression`/`conversion`/`customer_journey`/`content`/`brand` scorecards and an honest `mobile: { tested: false, note: "..." }` disclosure. Distinct from `seo-audit` above: this asks whether the page converts visitors, not whether it can be found in search. Past audits for a client are listable via `GET /clients/cda-septic-systems/website-audits` (optionally `?url=...`), newest first, for before/after comparison (see [ARCHITECTURE.md](./ARCHITECTURE.md#website-intelligence-pipeline-phase-7)).
+
 ### Or open the Citadel Command Center dashboard (Phase 6)
 
 ```bash
@@ -145,10 +157,10 @@ ANTHROPIC_MODEL=claude-sonnet-5
 shared/          Core types & interfaces (Tool, Agent, Skill, ModelProvider, client knowledge & Content schemas)
 database/        Prisma schema, migrations, repositories, getClientContext, seed script
 integrations/    Concrete adapters: models (Anthropic/mock), social publishing, website fetch, reviews (mock/Google), OpenClaw
-prompts/         Versioned prompt/policy modules: content + SEO + review prompts, Brand QA policy, Orchestrator routing policy
+prompts/         Versioned prompt/policy modules: content + SEO + website + review prompts, Brand QA policy, Orchestrator routing policy
 tools/           The tool abstraction layer agents call instead of hallucinating
-agents/          Orchestrator + specialist agents (Content, Brand QA, SEO, Review implemented; others are stubs)
-skills/          Complete user-facing workflows (create-social-post, seo-audit, review-analyze, review-respond)
+agents/          Orchestrator + specialist agents (Content, Brand QA, SEO, Website, Review implemented; Strategy/Analytics are stubs)
+skills/          Complete user-facing workflows (create-social-post, seo-audit, website-audit, review-analyze, review-respond)
 knowledge/       Structured per-client/industry/SEO/brand-voice data
 apps/api/        Express API — the composition root that wires everything together, incl. the /dashboard/* JSON API
 apps/dashboard/  Citadel Command Center — static file server + vanilla HTML/CSS/JS staff dashboard (Phase 6)

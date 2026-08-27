@@ -5,6 +5,7 @@ import {
   clientRepository,
   contentRepository,
   seoAuditRepository,
+  websiteAuditRepository,
   reviewRepository,
   activityLogRepository,
   getClientContext,
@@ -60,7 +61,7 @@ export function dashboardRouter(toolRegistry: ToolRegistry, env: Env): Router {
   router.get(
     '/overview',
     asyncHandler(async (_req, res) => {
-      const [clients, draftContent, pendingApprovals, revisionRequiredContent, recentActivity, recentSeoAudits, recentReviews] =
+      const [clients, draftContent, pendingApprovals, revisionRequiredContent, recentActivity, recentSeoAudits, recentWebsiteAudits, recentReviews] =
         await Promise.all([
           clientRepository.list(),
           contentRepository.listAllForDashboard({ statuses: ['DRAFT'] }),
@@ -68,6 +69,7 @@ export function dashboardRouter(toolRegistry: ToolRegistry, env: Env): Router {
           contentRepository.listAllForDashboard({ statuses: ['REVISION_REQUIRED'] }),
           activityLogRepository.listAllForDashboard(OVERVIEW_RECENT_LIMIT),
           seoAuditRepository.listAllForDashboard({ limit: OVERVIEW_RECENT_LIMIT }),
+          websiteAuditRepository.listAllForDashboard({ limit: OVERVIEW_RECENT_LIMIT }),
           reviewRepository.listAllForDashboard({ limit: OVERVIEW_RECENT_LIMIT }),
         ]);
 
@@ -80,6 +82,7 @@ export function dashboardRouter(toolRegistry: ToolRegistry, env: Env): Router {
         },
         recentActivity,
         recentSeoAudits: withClientNames(recentSeoAudits, clients),
+        recentWebsiteAudits: withClientNames(recentWebsiteAudits, clients),
         recentReviews: withClientNames(recentReviews, clients),
       });
     }),
@@ -256,6 +259,25 @@ export function dashboardRouter(toolRegistry: ToolRegistry, env: Env): Router {
       const audit = await seoAuditRepository.requireByIdGlobal(req.params.auditId as string);
       const client = await clientRepository.requireByIdOrSlug(audit.clientId);
       res.json({ seoAudit: audit, client });
+    }),
+  );
+
+  // --- Website audits (Phase 7, read-only — same "never let a dashboard edit alter an audit result" rule) --
+
+  router.get(
+    '/website-audits',
+    asyncHandler(async (_req, res) => {
+      const [audits, clients] = await Promise.all([websiteAuditRepository.listAllForDashboard({}), clientRepository.list()]);
+      res.json({ websiteAudits: withClientNames(audits, clients) });
+    }),
+  );
+
+  router.get(
+    '/website-audits/:auditId',
+    asyncHandler(async (req, res) => {
+      const audit = await websiteAuditRepository.requireByIdGlobal(req.params.auditId as string);
+      const client = await clientRepository.requireByIdOrSlug(audit.clientId);
+      res.json({ websiteAudit: audit, client });
     }),
   );
 

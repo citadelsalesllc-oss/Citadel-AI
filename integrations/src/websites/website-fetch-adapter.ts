@@ -86,6 +86,29 @@ function countImagesMissingAlt(html: string): { count: number; missingAlt: numbe
   return { count: imgTags.length, missingAlt };
 }
 
+/**
+ * `extractLinks` above deliberately drops `tel:`/`mailto:` hrefs (they
+ * aren't navigable pages, so they don't belong in the SEO link graph) —
+ * this is the separate pass that captures exactly those, for the Website
+ * Agent's click-to-call/click-to-email conversion checks (Phase 7).
+ */
+function extractContactLinks(html: string): { telLinks: string[]; mailtoLinks: string[] } {
+  const hrefs = Array.from(html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)).map((m) => m[1] ?? '');
+  const telLinks = [...new Set(hrefs.filter((h) => h.toLowerCase().startsWith('tel:')).map((h) => h.slice(4).trim()))];
+  const mailtoLinks = [...new Set(hrefs.filter((h) => h.toLowerCase().startsWith('mailto:')).map((h) => h.slice(7).split('?')[0]?.trim() ?? ''))];
+  return { telLinks, mailtoLinks };
+}
+
+function countForms(html: string): number {
+  return (html.match(/<form\b/gi) ?? []).length;
+}
+
+/** Phone-number-shaped substrings in visible page text — catches a number shown as plain text rather than a `tel:` link. Deduped to digits only, since formatting varies ("(208) 555-0142" vs "208.555.0142"). */
+function extractPhoneNumberMatches(text: string): string[] {
+  const matches = text.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) ?? [];
+  return [...new Set(matches.map((m) => m.replace(/\D/g, '')))];
+}
+
 function extractVisibleText(html: string): { excerpt: string; wordCount: number } {
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -190,6 +213,9 @@ export class WebsiteFetchAdapter {
     const { excerpt, wordCount } = extractVisibleText(html);
     const links = extractLinks(html, finalUrl);
     const { count: imageCount, missingAlt: imagesMissingAlt } = countImagesMissingAlt(html);
+    const { telLinks, mailtoLinks } = extractContactLinks(html);
+    const formCount = countForms(html);
+    const phoneNumberMatches = extractPhoneNumberMatches(excerpt);
 
     const [robotsTxt, sitemap] = await Promise.all([
       fetchRobotsTxt(finalUrl.origin),
@@ -217,6 +243,10 @@ export class WebsiteFetchAdapter {
       internalLinkCount: links.filter((l) => l.internal).length,
       imageCount,
       imagesMissingAlt,
+      telLinks,
+      mailtoLinks,
+      formCount,
+      phoneNumberMatches,
       robotsTxt,
       sitemap,
       fetchedAt: new Date(),

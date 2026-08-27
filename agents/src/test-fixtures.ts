@@ -1,4 +1,4 @@
-import type { ClientContext } from '@citadel/shared';
+import type { ClientContext, WebsiteFetchResult } from '@citadel/shared';
 
 export function makeTestClient(overrides: Partial<ClientContext> = {}): ClientContext {
   const now = new Date('2026-01-01T00:00:00Z');
@@ -94,6 +94,53 @@ export function makeTestClient(overrides: Partial<ClientContext> = {}): ClientCo
     faqs: [],
     marketingNotes: [],
     recentContent: [],
+    ...overrides,
+  };
+}
+
+/**
+ * A reasonably strong baseline page (clear CTA, visible phone, contact
+ * form, trust signals) shared by the SEO and Website agents' test suites —
+ * tests override toward specific negative cases (missing CTA, no phone,
+ * etc.) rather than each file maintaining its own copy of a "good" page.
+ */
+export function makeTestPage(overrides: Partial<WebsiteFetchResult> = {}): WebsiteFetchResult {
+  return {
+    requestedUrl: 'https://example.com/',
+    finalUrl: 'https://example.com/',
+    redirected: false,
+    statusCode: 200,
+    ok: true,
+    https: true,
+    contentType: 'text/html',
+    title: "Widget Installation in Coeur d'Alene | Test Client Co",
+    metaDescription: "Local widget installation serving Coeur d'Alene, ID. Call now for a free estimate.",
+    canonicalUrl: 'https://example.com/',
+    metaRobots: 'index, follow',
+    headings: [
+      { level: 1, text: "Widget Installation in Coeur d'Alene" },
+      { level: 2, text: 'Our Services' },
+      { level: 2, text: 'Frequently Asked Questions' },
+    ],
+    h1Count: 1,
+    h2Count: 2,
+    wordCount: 400,
+    textExcerpt:
+      "Test Client Co proudly offers widget installation serving Coeur d'Alene, ID. Call now for a free estimate. We are licensed and insured with 20 years of experience. Call (208) 555-0142 today. Read our 5 star reviews from happy customers. We offer financing and a satisfaction guarantee — no obligation quotes.",
+    links: [
+      { href: 'https://example.com/contact', text: 'Contact Us', internal: true },
+      { href: 'https://example.com/quote', text: 'Get a Free Quote', internal: true },
+    ],
+    internalLinkCount: 2,
+    imageCount: 1,
+    imagesMissingAlt: 0,
+    telLinks: ['2085550142'],
+    mailtoLinks: ['info@example.com'],
+    formCount: 1,
+    phoneNumberMatches: ['2085550142'],
+    robotsTxt: { exists: true, blocksAll: false, content: 'User-agent: *\nDisallow:\n' },
+    sitemap: { exists: true, url: 'https://example.com/sitemap.xml' },
+    fetchedAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
   };
 }
