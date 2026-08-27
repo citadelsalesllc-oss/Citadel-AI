@@ -14,6 +14,7 @@ import { createPublishContentTool } from './publish-tools.js';
 import { reviewLookupTool, analyticsLookupTool } from './stub-data-tools.js';
 import { webSearchTool } from './web-search-tool.js';
 import { createWebsiteFetchTool, createWebsiteAnalyzeTool } from './website-tools.js';
+import { seoAuditSaveTool, seoAuditHistoryTool } from './seo-tools.js';
 
 export interface ToolRegistryOptions {
   publishAdapter?: PublishAdapter;
@@ -40,6 +41,8 @@ export function createToolRegistry(options: ToolRegistryOptions = {}): ToolRegis
   registry.register(webSearchTool);
   registry.register(createWebsiteFetchTool(websiteFetchAdapter));
   registry.register(createWebsiteAnalyzeTool(websiteFetchAdapter));
+  registry.register(seoAuditSaveTool);
+  registry.register(seoAuditHistoryTool);
 
   return registry;
 }

@@ -10,6 +10,7 @@ import {
   offerRepository,
   faqRepository,
   marketingNoteRepository,
+  seoAuditRepository,
   getClientContext,
 } from '@citadel/database';
 import {
@@ -28,10 +29,10 @@ import {
   ContentTypeSchema,
 } from '@citadel/shared';
 import type { Orchestrator } from '@citadel/agents';
-import type { CreateSocialPostOutput } from '@citadel/skills';
+import type { CreateSocialPostOutput, SeoAuditOutput } from '@citadel/skills';
 import { z } from 'zod';
 import { asyncHandler } from './async-handler.js';
-import { logGenerationEvent } from '../logger.js';
+import { logGenerationEvent, logSeoAuditEvent } from '../logger.js';
 
 /**
  * All client knowledge sub-resources (services, service areas, brand
@@ -395,6 +396,98 @@ export function clientsRouter(orchestrator: Orchestrator, modelProviderName: str
         });
         throw error;
       }
+    }),
+  );
+
+  // --- SEO audit (Phase 4) ------------------------------------------------------------
+  // USER REQUEST -> ORCHESTRATOR -> CLIENT CONTEXT -> WEBSITE FETCH -> SEO
+  // AGENT (deterministic checks + LLM-prioritized recommendations) -> SAVE
+  // -> RETURN RESULT. See agents/src/orchestrator/orchestrator.ts's
+  // runSeoAudit() for the actual pipeline; this route only translates
+  // between HTTP and that call, and logs the observability event either way.
+
+  const SeoAuditBodySchema = z.object({
+    url: z.string().url(),
+    target_service: z.string().optional(),
+    target_location: z.string().optional(),
+    instructions: z.string().optional(),
+  });
+
+  router.post(
+    '/:idOrSlug/ai/seo-audit',
+    asyncHandler(async (req, res) => {
+      const body = SeoAuditBodySchema.parse(req.body);
+      const clientIdOrSlug = req.params.idOrSlug as string;
+      const startedAt = Date.now();
+
+      try {
+        const outcome = await orchestrator.runSeoAudit({
+          clientIdOrSlug,
+          task: 'seo_audit',
+          url: body.url,
+          targetService: body.target_service,
+          targetLocation: body.target_location,
+          userInstructions: body.instructions,
+          actor: req.actor,
+          requestId: req.requestId,
+        });
+
+        const result = outcome.result as SeoAuditOutput;
+        const { audit, auditRecord } = result;
+
+        logSeoAuditEvent({
+          requestId: req.requestId,
+          clientId: auditRecord.clientId,
+          agent: outcome.skillName,
+          task: 'seo_audit',
+          modelProvider: audit.providerUsed,
+          executionTimeMs: Date.now() - startedAt,
+          success: true,
+          overallScore: audit.overallScore,
+        });
+
+        res.json({
+          audit: {
+            url: audit.url,
+            overall_score: audit.overallScore,
+            technical: audit.technical,
+            on_page: audit.onPage,
+            local_seo: audit.localSeo,
+            conversion: audit.conversion,
+            keyword_opportunities: audit.keywordOpportunities,
+          },
+          evidence: audit.evidence,
+          recommendations: audit.recommendations,
+          clientId: auditRecord.clientId,
+          auditId: auditRecord.id,
+          agentUsed: outcome.skillName,
+          modelProvider: { name: audit.providerUsed, model: audit.modelUsed },
+          usage: audit.usage ?? null,
+          executionTimeMs: Date.now() - startedAt,
+        });
+      } catch (error) {
+        logSeoAuditEvent({
+          requestId: req.requestId,
+          clientId: clientIdOrSlug,
+          agent: 'seo-agent',
+          task: 'seo_audit',
+          modelProvider: modelProviderName,
+          executionTimeMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof CitadelError ? error.code : 'UNKNOWN_ERROR',
+        });
+        throw error;
+      }
+    }),
+  );
+
+  router.get(
+    '/:idOrSlug/seo-audits',
+    asyncHandler(async (req, res) => {
+      const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
+      const url = typeof req.query.url === 'string' ? req.query.url : undefined;
+      const seoAudits = await seoAuditRepository.listByClient(client.id, url);
+      res.json({ seoAudits });
     }),
   );
 

@@ -17,6 +17,15 @@ const STATUS_BY_CODE: Record<string, number> = {
   // fine, an upstream dependency wasn't. 502, not 500.
   MODEL_PROVIDER_ERROR: 502,
   MALFORMED_MODEL_RESPONSE: 502,
+  // Website fetch failures for the SEO Agent (Phase 4) — same "caller's
+  // request was fine, an upstream dependency wasn't" reasoning as the
+  // model-provider codes above, except INVALID_URL, which is a bad
+  // request input, not an upstream failure.
+  INVALID_URL: 400,
+  WEBSITE_UNREACHABLE: 502,
+  WEBSITE_FETCH_TIMEOUT: 504,
+  UNSUPPORTED_CONTENT_TYPE: 422,
+  WEBSITE_CONTENT_TOO_LARGE: 422,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

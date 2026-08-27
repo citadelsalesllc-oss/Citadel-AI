@@ -23,9 +23,16 @@ export interface WebsiteAnalysis {
   statusCode: number;
   title: { value: string | null; length: number; issues: string[] };
   metaDescription: { value: string | null; length: number; issues: string[] };
-  headings: { count: number; issues: string[] };
+  headings: { count: number; h1Count: number; issues: string[] };
 }
 
+/**
+ * A lightweight, generic on-page check — kept for the (still-planned)
+ * Website Agent and any caller that just wants a quick title/meta/heading
+ * read. The SEO Agent's real audit (Phase 4) uses its own, much deeper
+ * deterministic engine — see agents/src/seo/checks.ts — which this
+ * intentionally does not duplicate.
+ */
 function analyze(fetchResult: WebsiteFetchResult): WebsiteAnalysis {
   const titleIssues: string[] = [];
   if (!fetchResult.title) titleIssues.push('Missing <title> tag.');
@@ -36,10 +43,12 @@ function analyze(fetchResult: WebsiteFetchResult): WebsiteAnalysis {
   else if (fetchResult.metaDescription.length > 160) descIssues.push('Meta description exceeds ~160 characters.');
 
   const headingIssues: string[] = [];
-  if (fetchResult.headings.length === 0) headingIssues.push('No H1/H2 headings found.');
+  if (fetchResult.headings.length === 0) headingIssues.push('No headings found.');
+  if (fetchResult.h1Count === 0) headingIssues.push('Missing H1.');
+  if (fetchResult.h1Count > 1) headingIssues.push('Multiple H1s found.');
 
   return {
-    url: fetchResult.url,
+    url: fetchResult.finalUrl,
     statusCode: fetchResult.statusCode,
     title: { value: fetchResult.title, length: fetchResult.title?.length ?? 0, issues: titleIssues },
     metaDescription: {
@@ -47,7 +56,7 @@ function analyze(fetchResult: WebsiteFetchResult): WebsiteAnalysis {
       length: fetchResult.metaDescription?.length ?? 0,
       issues: descIssues,
     },
-    headings: { count: fetchResult.headings.length, issues: headingIssues },
+    headings: { count: fetchResult.headings.length, h1Count: fetchResult.h1Count, issues: headingIssues },
   };
 }
 

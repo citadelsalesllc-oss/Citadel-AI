@@ -122,3 +122,54 @@ export class MalformedModelResponseError extends CitadelError {
     super(`${provider} returned a response that did not match the requested structure: ${detail}`, 'MALFORMED_MODEL_RESPONSE');
   }
 }
+
+/**
+ * Thrown before any fetch attempt when a supplied URL is malformed or uses
+ * a non-HTTP(S) scheme. Distinct from the network-level failures below —
+ * this is a request-input problem, not an upstream one.
+ */
+export class InvalidUrlError extends CitadelError {
+  constructor(url: string, reason: string) {
+    super(`"${url}" is not a fetchable URL: ${reason}`, 'INVALID_URL');
+  }
+}
+
+/**
+ * Thrown when a website fetch could not complete because of a network/DNS
+ * failure (connection refused, name not resolved, TLS failure, etc.) — as
+ * opposed to the target site responding with an HTTP error status, which is
+ * itself a valid (and reportable) SEO finding, not a fetch failure. Never
+ * caught and turned into a fabricated "page could not be analyzed" result —
+ * the audit must fail honestly instead.
+ */
+export class WebsiteUnreachableError extends CitadelError {
+  constructor(url: string, cause: string) {
+    super(`Could not reach ${url}: ${cause}`, 'WEBSITE_UNREACHABLE');
+  }
+}
+
+/** Thrown when a website fetch exceeds the configured timeout. */
+export class WebsiteFetchTimeoutError extends CitadelError {
+  constructor(url: string, timeoutMs: number) {
+    super(`Fetching ${url} timed out after ${timeoutMs}ms`, 'WEBSITE_FETCH_TIMEOUT');
+  }
+}
+
+/**
+ * Thrown when a fetched resource's Content-Type isn't HTML (a PDF, image,
+ * API response, etc.) and so cannot be analyzed by the SEO checks, which
+ * all assume parsed markup. Reported honestly rather than running HTML
+ * checks against non-HTML bytes and fabricating findings.
+ */
+export class UnsupportedContentTypeError extends CitadelError {
+  constructor(url: string, contentType: string) {
+    super(`${url} returned an unsupported content type for SEO analysis: ${contentType}`, 'UNSUPPORTED_CONTENT_TYPE');
+  }
+}
+
+/** Thrown when a fetched page's body exceeds the configured size limit, to bound memory/time on pathological or non-HTML responses. */
+export class WebsiteContentTooLargeError extends CitadelError {
+  constructor(url: string, limitBytes: number) {
+    super(`${url}'s response exceeded the ${limitBytes}-byte analysis limit`, 'WEBSITE_CONTENT_TOO_LARGE');
+  }
+}

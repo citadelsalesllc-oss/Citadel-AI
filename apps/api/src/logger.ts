@@ -25,3 +25,20 @@ export interface GenerationLogEntry {
 export function logGenerationEvent(entry: GenerationLogEntry): void {
   console.log(JSON.stringify({ type: 'ai_generation', timestamp: new Date().toISOString(), ...entry }));
 }
+
+/** The SEO-audit analogue of GenerationLogEntry — same no-secrets guarantee: only the fields listed here are ever logged. */
+export interface SeoAuditLogEntry {
+  requestId: string;
+  clientId: string;
+  agent: string;
+  task: string;
+  modelProvider: string;
+  executionTimeMs: number;
+  success: boolean;
+  overallScore?: number;
+  errorCode?: string;
+}
+
+export function logSeoAuditEvent(entry: SeoAuditLogEntry): void {
+  console.log(JSON.stringify({ type: 'seo_audit', timestamp: new Date().toISOString(), ...entry }));
+}

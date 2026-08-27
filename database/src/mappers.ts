@@ -9,6 +9,7 @@ import type {
   Faq as FaqRow,
   MarketingNote as MarketingNoteRow,
   ContentItem as ContentItemRow,
+  SeoAudit as SeoAuditRow,
   AuditLog as AuditLogRow,
 } from '@prisma/client';
 import type {
@@ -22,6 +23,8 @@ import type {
   Faq,
   MarketingNote,
   ContentItem,
+  SeoAuditRecord,
+  SeoAuditResult,
   AuditLogEntry,
 } from '@citadel/shared';
 
@@ -185,6 +188,20 @@ export function toContentItem(row: ContentItemRow): ContentItem {
     rejectionReason: row.rejectionReason,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toSeoAuditRecord(row: SeoAuditRow): SeoAuditRecord {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    url: row.url,
+    overallScore: row.overallScore,
+    result: row.result as unknown as SeoAuditResult,
+    agentVersion: row.agentVersion,
+    modelProvider: row.modelProvider,
+    modelUsed: row.modelUsed,
+    createdAt: row.createdAt,
   };
 }
 

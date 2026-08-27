@@ -44,6 +44,19 @@ function buildSkillRegistry(handler?: (input: unknown) => unknown) {
   return registry;
 }
 
+function buildSeoAuditSkillRegistry(handler?: (input: unknown) => unknown) {
+  const registry = new SkillRegistry();
+  registry.register({
+    name: 'seo-audit',
+    description: 'fake',
+    inputSchema: z.object({}).passthrough(),
+    async run(input) {
+      return handler ? handler(input) : { auditRecord: { id: 'audit_1' }, audit: { overallScore: 80 } };
+    },
+  });
+  return registry;
+}
+
 describe('Orchestrator', () => {
   describe('handle (free-text entry point)', () => {
     it('routes a Facebook-flavored instruction to the create-social-post skill', async () => {
@@ -156,7 +169,7 @@ describe('Orchestrator', () => {
       await expect(
         orchestrator.generateContent({
           clientIdOrSlug: client.core.slug,
-          task: 'seo_audit',
+          task: 'website_audit',
           platform: 'FACEBOOK',
           topic: 'anything',
           actor: ACTOR,
@@ -198,6 +211,114 @@ describe('Orchestrator', () => {
           requestId: 'req-9',
         }),
       ).rejects.toThrow('connection to database lost');
+    });
+  });
+
+  describe('runSeoAudit (structured entry point, Phase 4)', () => {
+    it('identifies the client and delegates to the seo-audit skill', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ auditRecord: { id: 'audit_1' }, audit: { overallScore: 72 } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSeoAuditSkillRegistry(skillRun), new AgentRegistry());
+
+      const outcome = await orchestrator.runSeoAudit({
+        clientIdOrSlug: client.core.slug,
+        task: 'seo_audit',
+        url: 'https://example.com/',
+        actor: ACTOR,
+        requestId: 'req-10',
+      });
+
+      expect(outcome.status).toBe('completed');
+      expect(outcome.skillName).toBe('seo-audit');
+      expect(skillRun).toHaveBeenCalledWith(
+        expect.objectContaining({ clientIdOrSlug: client.core.slug, url: 'https://example.com/' }),
+      );
+    });
+
+    it('passes through optional target service/location/instructions', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ auditRecord: { id: 'audit_1' }, audit: { overallScore: 72 } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSeoAuditSkillRegistry(skillRun), new AgentRegistry());
+
+      await orchestrator.runSeoAudit({
+        clientIdOrSlug: client.core.slug,
+        task: 'seo_audit',
+        url: 'https://example.com/',
+        targetService: 'widget installation',
+        targetLocation: "Coeur d'Alene",
+        userInstructions: 'focus on the homepage',
+        actor: ACTOR,
+        requestId: 'req-11',
+      });
+
+      expect(skillRun).toHaveBeenCalledWith(
+        expect.objectContaining({ targetService: 'widget installation', targetLocation: "Coeur d'Alene", userInstructions: 'focus on the homepage' }),
+      );
+    });
+
+    it('reports an unsupported task honestly instead of guessing a skill', async () => {
+      const client = makeTestClient();
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSeoAuditSkillRegistry(), new AgentRegistry());
+
+      await expect(
+        orchestrator.runSeoAudit({
+          clientIdOrSlug: client.core.slug,
+          task: 'website_audit',
+          url: 'https://example.com/',
+          actor: ACTOR,
+          requestId: 'req-12',
+        }),
+      ).rejects.toThrow(NotImplementedError);
+    });
+
+    it('throws ClientNotFoundError for an invalid client instead of inventing one', async () => {
+      const client = makeTestClient();
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSeoAuditSkillRegistry(), new AgentRegistry());
+
+      await expect(
+        orchestrator.runSeoAudit({
+          clientIdOrSlug: 'does-not-exist',
+          task: 'seo_audit',
+          url: 'https://example.com/',
+          actor: ACTOR,
+          requestId: 'req-13',
+        }),
+      ).rejects.toThrow(ClientNotFoundError);
+    });
+
+    it('does not resolve seo_audit against a client scoped to a different tenant\'s tool registry', async () => {
+      const clientA = makeTestClient({ core: { ...makeTestClient().core, id: 'client_a', slug: 'client-a' } });
+      const orchestrator = new Orchestrator(buildToolRegistry(clientA), buildSeoAuditSkillRegistry(), new AgentRegistry());
+
+      await expect(
+        orchestrator.runSeoAudit({
+          clientIdOrSlug: 'client-b',
+          task: 'seo_audit',
+          url: 'https://example.com/',
+          actor: ACTOR,
+          requestId: 'req-14',
+        }),
+      ).rejects.toThrow(ClientNotFoundError);
+    });
+  });
+
+  describe('regression: create_social_post is unaffected by seo_audit routing', () => {
+    it('still resolves create_social_post to the create-social-post skill via the shared task lookup', async () => {
+      const client = makeTestClient();
+      const skillRun = vi.fn().mockResolvedValue({ contentItem: { id: 'c1' }, qa: { passed: true, issues: [], warnings: [] } });
+      const orchestrator = new Orchestrator(buildToolRegistry(client), buildSkillRegistry(skillRun), new AgentRegistry());
+
+      const outcome = await orchestrator.generateContent({
+        clientIdOrSlug: client.core.slug,
+        task: 'create_social_post',
+        platform: 'FACEBOOK',
+        topic: 'a septic installation',
+        actor: ACTOR,
+        requestId: 'req-15',
+      });
+
+      expect(outcome.status).toBe('completed');
+      expect(outcome.skillName).toBe('create-social-post');
     });
   });
 });

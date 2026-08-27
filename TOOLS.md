@@ -14,8 +14,10 @@ Tools are the only way agents touch real data or external systems — they never
 | `content_reject` | Postgres, `REVIEW -> REJECTED` | Real |
 | `content_request_revision` | Postgres, `REVIEW -> REVISION_REQUIRED` | Real |
 | `publish_content` | `PublishAdapter` (mock by default), `APPROVED -> PUBLISHED` | Real gate; mock adapter by default |
-| `website_fetch` | `WebsiteFetchAdapter` — real HTTP fetch + regex extraction | Real |
+| `website_fetch` | `WebsiteFetchAdapter` — real HTTP fetch + regex extraction, plus robots.txt/sitemap.xml (Phase 4) | Real |
 | `website_analyze` | `website_fetch` + basic on-page SEO heuristics | Real |
+| `seo_audit_save` | Postgres, persists a completed `SeoAuditResult`, audit-logged | Real |
+| `seo_audit_history` | Postgres, lists a client's past audits newest-first, optionally filtered to one URL | Real |
 | `review_lookup` | none — no review platform configured | Stub (`NotConfiguredError`) |
 | `analytics_lookup` | none — no analytics platform configured | Stub (`NotConfiguredError`) |
 | `web_search` | none — no search provider configured | Stub (returns `{results: [], note: "..."}`, never fabricates results) |
@@ -29,6 +31,12 @@ Tools are the only way agents touch real data or external systems — they never
 `publish_content` uses whichever `PublishAdapter` `apps/api/src/container.ts` builds from `PUBLISH_PROVIDER`:
 - `mock` (default) — `MockPublishAdapter` (`integrations/src/social/mock-publish-adapter.ts`) always "succeeds," returns a `mock-<platform>-<uuid>` external ID, and tags the result `isMock: true`. It never contacts a real API.
 - `facebook` — `FacebookAdapter` (`integrations/src/social/facebook-adapter.ts`) is a real seam that currently always throws `NotConfiguredError` (real Graph API publishing is future work per the master spec — see "ENGINEERING RULE: Do not fake integrations").
+
+## Website fetching and SEO audit tools in detail (Phase 4)
+
+`website_fetch` never pretends a page was retrieved when it wasn't: a genuinely unreachable target, a timeout, a non-HTML response, or an oversized body all throw (`WebsiteUnreachableError`/`WebsiteFetchTimeoutError`/`UnsupportedContentTypeError`/`WebsiteContentTooLargeError`), while an HTTP error status from the target itself (404, 500...) is returned as data — it's a real, analyzable finding, not a fetch failure. See ARCHITECTURE.md "SEO analysis pipeline" for the full behavior, including why fetching `robots.txt`/`sitemap.xml` for the client's own, explicitly-audited URL isn't the "web crawler" the master spec says not to build yet.
+
+`seo_audit_save` never gates on a pass/fail the way `content_save` gates on Brand QA — every completed SEO audit is persisted, good or bad, so `seo_audit_history` can support before/after comparison as a client's site improves over time.
 
 ## Knowledge management is API routes, not agent tools
 

@@ -35,6 +35,20 @@ export interface GenerateContentRequest {
 
 export type GenerateContentResult = { status: 'completed'; skillName: string; result: unknown };
 
+export interface SeoAuditRequest {
+  clientIdOrSlug: string;
+  /** Only 'seo_audit' is supported — see prompts/orchestrator/v1.ts SUPPORTED_STRUCTURED_TASKS. */
+  task: string;
+  url: string;
+  targetService?: string;
+  targetLocation?: string;
+  userInstructions?: string;
+  actor: RequestActor;
+  requestId: string;
+}
+
+export type SeoAuditOrchestratorResult = { status: 'completed'; skillName: string; result: unknown };
+
 /**
  * The primary Citadel AI agent. It does NOT perform marketing tasks itself —
  * it identifies the client, validates it, classifies/validates the request,
@@ -64,6 +78,20 @@ export class Orchestrator {
       throw new ClientNotActiveError(clientIdOrSlug, client.core.status);
     }
     return client;
+  }
+
+  /**
+   * "The orchestrator should determine the correct specialist from the
+   * structured task" (Phase 4 spec) — the shared lookup both structured
+   * entry points (generateContent/runSeoAudit) use. Throws NotImplementedError
+   * for anything not in TASK_SKILL_MAP rather than guessing at a mapping.
+   */
+  private resolveSkillForTask(task: string): string {
+    const supportedTasks: readonly string[] = orchestratorPolicyV1.SUPPORTED_STRUCTURED_TASKS;
+    if (!supportedTasks.includes(task)) {
+      throw new NotImplementedError(`task "${task}"`);
+    }
+    return orchestratorPolicyV1.TASK_SKILL_MAP[task as keyof typeof orchestratorPolicyV1.TASK_SKILL_MAP];
   }
 
   /** Free-text entry point (e.g. POST /orchestrator/requests) — classifies the instruction, then delegates. */
@@ -128,14 +156,10 @@ export class Orchestrator {
    */
   async generateContent(request: GenerateContentRequest): Promise<GenerateContentResult> {
     await this.identifyAndValidateClient(request.clientIdOrSlug, request.actor, request.requestId);
-
-    const supportedTasks: readonly string[] = orchestratorPolicyV1.SUPPORTED_STRUCTURED_TASKS;
-    if (!supportedTasks.includes(request.task)) {
-      throw new NotImplementedError(`task "${request.task}"`);
-    }
+    const skillName = this.resolveSkillForTask(request.task);
 
     const result = await this.skillRegistry.run(
-      'create-social-post',
+      skillName,
       {
         clientIdOrSlug: request.clientIdOrSlug,
         platform: request.platform.toLowerCase(),
@@ -145,6 +169,33 @@ export class Orchestrator {
       { actor: request.actor, requestId: request.requestId },
     );
 
-    return { status: 'completed', skillName: 'create-social-post', result };
+    return { status: 'completed', skillName, result };
+  }
+
+  /**
+   * Structured entry point — POST /clients/:clientId/ai/seo-audit (Phase
+   * 4). Identifies + validates the client exactly like generateContent(),
+   * resolves 'seo_audit' to the seo-audit skill via the same
+   * task-to-skill lookup, and returns its result. The skill internally
+   * fetches the target URL, runs the SEO Agent, and saves the audit — see
+   * skills/src/seo-audit/seo-audit.ts.
+   */
+  async runSeoAudit(request: SeoAuditRequest): Promise<SeoAuditOrchestratorResult> {
+    await this.identifyAndValidateClient(request.clientIdOrSlug, request.actor, request.requestId);
+    const skillName = this.resolveSkillForTask(request.task);
+
+    const result = await this.skillRegistry.run(
+      skillName,
+      {
+        clientIdOrSlug: request.clientIdOrSlug,
+        url: request.url,
+        targetService: request.targetService,
+        targetLocation: request.targetLocation,
+        userInstructions: request.userInstructions,
+      },
+      { actor: request.actor, requestId: request.requestId },
+    );
+
+    return { status: 'completed', skillName, result };
   }
 }

@@ -62,6 +62,7 @@ model Client {
   faqs            Faq[]
   marketingNotes  MarketingNote[]
   contentItems    ContentItem[]
+  seoAudits       SeoAudit[]
   auditLogs       AuditLog[]
 
   createdAt DateTime @default(now())
@@ -277,6 +278,32 @@ model ContentItem {
 
   @@index([clientId, status])
   @@map("content_items")
+}
+
+/// One row per SEO Agent run (Phase 4). `result` stores the full structured
+/// SeoAuditResult (technical/on_page/local_seo/conversion/evidence/
+/// recommendations) so past audits can be re-displayed or diffed without
+/// re-running analysis; `overallScore` is denormalized out of `result` so
+/// audits for a client/URL can be listed/compared over time with a simple
+/// query instead of parsing JSON. Never stores credentials — see
+/// tools/src/seo-tools.ts's seo_audit_save.
+model SeoAudit {
+  id       String @id @default(cuid())
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  url      String
+
+  overallScore Int
+  result       Json
+
+  agentVersion  String
+  modelProvider String
+  modelUsed     String
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, url, createdAt])
+  @@map("seo_audits")
 }
 
 model AuditLog {

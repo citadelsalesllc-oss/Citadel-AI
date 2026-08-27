@@ -5,6 +5,7 @@ import { createToolRegistry } from '@citadel/tools';
 import {
   ContentAgent,
   BrandQaAgent,
+  SeoAgent,
   Orchestrator,
   createDefaultAgentRegistry,
 } from '@citadel/agents';
@@ -43,9 +44,10 @@ export function buildContainer(env: Env): Container {
 
   const contentAgent = new ContentAgent(modelProvider);
   const brandQaAgent = new BrandQaAgent();
+  const seoAgent = new SeoAgent(modelProvider);
   const agentRegistry = createDefaultAgentRegistry();
 
-  const skillRegistry = createDefaultSkillRegistry({ toolRegistry, contentAgent, brandQaAgent });
+  const skillRegistry = createDefaultSkillRegistry({ toolRegistry, contentAgent, brandQaAgent, seoAgent });
 
   const orchestrator = new Orchestrator(toolRegistry, skillRegistry, agentRegistry);
 

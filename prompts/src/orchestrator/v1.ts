@@ -41,6 +41,19 @@ export const AGENT_KEYWORD_PATTERNS: ReadonlyArray<readonly [RegExp, SpecialistA
 export const DEFAULT_CONTENT_PLATFORM: ContentPlatformKeyword = 'facebook';
 export const GENERIC_CONTENT_REQUEST_PATTERN = /\bpost\b|\bcontent\b|\bcaption\b/i;
 
-/** The only task the structured POST /clients/:clientId/ai/generate endpoint supports in Phase 3 — see AGENTS.md. */
-export const SUPPORTED_STRUCTURED_TASKS = ['create_social_post'] as const;
+/** The structured tasks the Orchestrator's task-based entry points (generateContent/runSeoAudit) support — see AGENTS.md. */
+export const SUPPORTED_STRUCTURED_TASKS = ['create_social_post', 'seo_audit'] as const;
 export type SupportedStructuredTask = (typeof SUPPORTED_STRUCTURED_TASKS)[number];
+
+/**
+ * "The orchestrator should determine the correct specialist from the
+ * structured task" (Phase 4 spec) — this table is that determination,
+ * shared by every structured entry point instead of each one hardcoding
+ * its own skill name. Adding a new structured task later means adding one
+ * row here and registering the matching skill, not touching Orchestrator's
+ * control flow.
+ */
+export const TASK_SKILL_MAP: Record<SupportedStructuredTask, string> = {
+  create_social_post: 'create-social-post',
+  seo_audit: 'seo-audit',
+};

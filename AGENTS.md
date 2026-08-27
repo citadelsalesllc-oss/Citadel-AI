@@ -8,11 +8,14 @@ The entry point, with two ways in:
 
 1. **`Orchestrator.handle(request)`** — free-text entry point:
    1. Resolves the client via the `client_context` tool (fails fast with `ClientNotFoundError`/`ClientNotActiveError` — never falls back to another client, never acts on an archived one).
-   2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below.
+   2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below (all still stubs from this entry point — see "SEO Agent" below for why even the implemented one is reached only through the structured entry point here).
    3. Delegates and normalizes the outcome into one response shape, including honest `not_implemented` and `unsupported` results (never a fabricated answer, never a crash on an unrecognized request).
-2. **`Orchestrator.generateContent(request)`** (Phase 3) — structured entry point for `POST /clients/:clientId/ai/generate`: takes an explicit `{ task, platform, topic, userInstructions? }` instead of free text, validates `task` against `SUPPORTED_STRUCTURED_TASKS` (only `create_social_post` today — anything else throws `NotImplementedError`), and delegates straight to the `create-social-post` skill. See ARCHITECTURE.md "Structured AI generation pipeline."
+2. **`Orchestrator.generateContent(request)`** (Phase 3) — structured entry point for `POST /clients/:clientId/ai/generate`: takes an explicit `{ task, platform, topic, userInstructions? }` instead of free text and delegates to whichever skill `task` resolves to.
+3. **`Orchestrator.runSeoAudit(request)`** (Phase 4) — structured entry point for `POST /clients/:clientId/ai/seo-audit`: takes an explicit `{ task, url, targetService?, targetLocation?, userInstructions? }` and delegates the same way.
 
-Either way, the Orchestrator does not generate content, run QA, or touch the database itself — see `create-social-post` in `skills/` for where that actually happens.
+Both structured entry points resolve `task` through the same private `resolveSkillForTask()` lookup (`TASK_SKILL_MAP` in `prompts/orchestrator/v1.ts` — `create_social_post -> create-social-post`, `seo_audit -> seo-audit`); anything not in that map throws `NotImplementedError` rather than guessing at a mapping. See ARCHITECTURE.md "Structured AI generation pipeline" and "SEO analysis pipeline."
+
+Either way, the Orchestrator does not generate content, run QA, fetch a website, or touch the database itself — see `create-social-post`/`seo-audit` in `skills/` for where that actually happens.
 
 ## Content Agent (`agents/src/content/`) — **implemented**
 
@@ -28,9 +31,13 @@ Rule-based (not a second model call) gate every generated draft passes through, 
 
 Planned: marketing strategy, campaign planning, offer strategy, competitive positioning, lead-gen recommendations. Currently registered via `createStubAgent` and returns `NotImplementedError` when routed to (e.g. "Help me plan a marketing strategy...").
 
-## SEO Agent (`agents/src/seo/`) — **stub**
+## SEO Agent (`agents/src/seo/`) — **implemented** (structured entry point) / **stub** (free-text entry point)
 
-Planned: keyword research, local SEO strategy, on-page analysis, meta title/description recommendations. The `website_analyze` tool (`tools/src/website-tools.ts`) already does basic on-page checks (title/meta-description length, heading presence) and is the intended building block for this agent's real implementation.
+`SeoAgent.run()` audits one already-fetched webpage (`{ url, page, targetService?, targetLocation?, userInstructions? }`) and returns the full structured `SeoAuditResult` — see ARCHITECTURE.md "SEO analysis pipeline" for the technical/on-page/local-SEO/conversion deterministic checks (`agents/src/seo/checks.ts`) plus the LLM-prioritized recommendations layered on top. Reached exclusively through the `seo-audit` skill (`POST /clients/:clientId/ai/seo-audit`) — the same relationship `ContentAgent` has to `create-social-post`.
+
+The free-text `Orchestrator.handle()` router still points SEO-flavored instructions ("Run an SEO audit...") at a **stub** (`agents/src/seo/index.ts`'s `seoAgent`, registered in `agent-registry.ts`), because that entry point has no way to extract a URL out of free text and `seo_audit` requires one — see that file's doc comment. Both share the name `'seo-agent'` deliberately: they're the same capability, reached through two different, equally real entry points.
+
+`website_fetch`/`website_analyze` (`tools/src/website-tools.ts`) predate this implementation and remain available for the still-planned Website Agent below; the SEO Agent's own checks (`agents/src/seo/checks.ts`) are a separate, much deeper deterministic engine built directly for it, not layered on `website_analyze`.
 
 ## Review Agent (`agents/src/reviews/`) — **stub**
 
@@ -46,4 +53,4 @@ Planned: marketing metrics analysis, trend/weak-campaign identification, client-
 
 ---
 
-**Why stubs instead of omission?** Registering a stub (rather than leaving the agent name unrecognized) lets the Orchestrator's router match the request and return a structured, honest "not implemented yet" result — consistent with the platform rule to explicitly report missing capabilities rather than silently doing nothing or fabricating an answer. Implementing one for real is a contained change: write the agent, swap its registration in `agents/src/orchestrator/agent-registry.ts`, done — the Orchestrator's routing and response-normalization logic doesn't change.
+**Why stubs instead of omission?** Registering a stub (rather than leaving the agent name unrecognized) lets the Orchestrator's router match the request and return a structured, honest "not implemented yet" result — consistent with the platform rule to explicitly report missing capabilities rather than silently doing nothing or fabricating an answer. Implementing one for real is a contained change: write the agent, wrap it in a skill (if it needs tools), and add its task to `TASK_SKILL_MAP` — done, as SEO's transition from stub to real implementation in Phase 4 demonstrates. Nothing about the Orchestrator's routing or response-normalization logic changed to support it.
