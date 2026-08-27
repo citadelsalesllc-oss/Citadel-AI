@@ -13,6 +13,7 @@ import {
   getClientContext,
 } from '@citadel/database';
 import {
+  CitadelError,
   CreateClientInputSchema,
   UpdateClientInputSchema,
   CreateServiceInputSchema,
@@ -26,8 +27,11 @@ import {
   CreateMarketingNoteInputSchema,
   ContentTypeSchema,
 } from '@citadel/shared';
+import type { Orchestrator } from '@citadel/agents';
+import type { CreateSocialPostOutput } from '@citadel/skills';
 import { z } from 'zod';
 import { asyncHandler } from './async-handler.js';
+import { logGenerationEvent } from '../logger.js';
 
 /**
  * All client knowledge sub-resources (services, service areas, brand
@@ -40,7 +44,7 @@ import { asyncHandler } from './async-handler.js';
  * client's real id — never a caller-supplied one — which is what makes
  * cross-tenant writes structurally impossible here.
  */
-export function clientsRouter(): Router {
+export function clientsRouter(orchestrator: Orchestrator, modelProviderName: string): Router {
   const router = Router();
 
   router.get(
@@ -297,6 +301,7 @@ export function clientsRouter(): Router {
         tags: input.tags,
         metadata: {},
         createdBy: req.actor.label,
+        initialStatus: 'DRAFT',
       });
       res.status(201).json({ contentItem });
     }),
@@ -308,6 +313,88 @@ export function clientsRouter(): Router {
       const client = await clientRepository.requireByIdOrSlug(req.params.idOrSlug as string);
       const items = await contentRepository.listByClient(client.id);
       res.json({ contentItems: items });
+    }),
+  );
+
+  // --- AI generation (Phase 3) --------------------------------------------------------
+  // USER REQUEST -> ORCHESTRATOR -> CLIENT CONTEXT -> CONTENT AGENT -> AI
+  // MODEL -> BRAND/FACTUAL QA -> SAVE -> RETURN RESULT. See
+  // agents/src/orchestrator/orchestrator.ts's generateContent() for the
+  // actual pipeline; this route only translates between HTTP and that
+  // call, and logs the observability event either way.
+
+  const GenerateContentBodySchema = z.object({
+    task: z.string().min(1),
+    platform: z.string().min(1),
+    topic: z.string().min(1),
+    userInstructions: z.string().optional(),
+  });
+
+  router.post(
+    '/:idOrSlug/ai/generate',
+    asyncHandler(async (req, res) => {
+      const body = GenerateContentBodySchema.parse(req.body);
+      const clientIdOrSlug = req.params.idOrSlug as string;
+      const startedAt = Date.now();
+
+      try {
+        const outcome = await orchestrator.generateContent({
+          clientIdOrSlug,
+          task: body.task,
+          platform: body.platform,
+          topic: body.topic,
+          userInstructions: body.userInstructions,
+          actor: req.actor,
+          requestId: req.requestId,
+        });
+
+        const result = outcome.result as CreateSocialPostOutput;
+
+        logGenerationEvent({
+          requestId: req.requestId,
+          clientId: result.contentItem.clientId,
+          agent: outcome.skillName,
+          task: body.task,
+          modelProvider: result.providerUsed,
+          executionTimeMs: Date.now() - startedAt,
+          success: true,
+          qaPassed: result.qa.passed,
+          contentStatus: result.contentItem.status,
+        });
+
+        res.json({
+          content: {
+            platform: result.generation.platform.toUpperCase(),
+            content: result.generation.content,
+            hashtags: result.generation.hashtags,
+            cta: result.generation.cta,
+            seo_keywords_used: result.generation.seoKeywordsUsed,
+            notes: result.generation.notes,
+          },
+          qaResult: {
+            passed: result.qa.passed,
+            issues: result.qa.issues,
+            warnings: result.qa.warnings,
+          },
+          contentId: result.contentItem.id,
+          status: result.contentItem.status,
+          agentUsed: outcome.skillName,
+          modelProvider: { name: result.providerUsed, model: result.modelUsed },
+          usage: result.generation.usage ?? null,
+        });
+      } catch (error) {
+        logGenerationEvent({
+          requestId: req.requestId,
+          clientId: clientIdOrSlug,
+          agent: 'content-agent',
+          task: body.task,
+          modelProvider: modelProviderName,
+          executionTimeMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof CitadelError ? error.code : 'UNKNOWN_ERROR',
+        });
+        throw error;
+      }
     }),
   );
 

@@ -15,6 +15,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the system is put together, [AG
 
 **Phase 2 (client knowledge system):** the client memory model was rebuilt from Phase 1's JSON-blob fields into a normalized Postgres schema — `Client` core record plus `Service`, `ServiceArea`, `BrandProfile`, `TargetAudience`, `SeoProfile`, `Offer`, `Faq`, `MarketingNote`, and extended `ContentItem` (platform/title/campaign/tags) tables — with a dedicated knowledge-retrieval service (`getClientContext`) and full CRUD API for populating it. Tenant isolation is enforced at both the repository and API layer and has automated proof (see [ARCHITECTURE.md](./ARCHITECTURE.md#client-memory-system)). Seed data now contains only facts actually given (just `companyName` for the demo client) — never invented business facts, matching the same rule already enforced on generated content.
 
+**Phase 3 (AI engine & orchestrator):** the real AI execution layer — a provider-agnostic `ModelProvider` interface with structured-JSON generation, a structured `Orchestrator.generateContent()` entry point, and `POST /clients/:clientId/ai/generate`, which runs the full pipeline (identify client → retrieve context → Content Agent → model → Brand QA → save as `DRAFT`/`REVISION_REQUIRED` → return result) for Facebook social posts. Brand QA now returns `{ passed, issues, warnings }` with checks for invented locations, CTA accuracy, hashtag appropriateness, and repetition, in addition to Phase 1's forbidden-phrase/invented-phone/invented-price checks. A QA failure is always saved (as `REVISION_REQUIRED`), never discarded and never silently approved. Every prompt and policy (content-generation prompt, Brand QA thresholds, Orchestrator routing rules) lives in a versioned `@citadel/prompts` package. See [ARCHITECTURE.md](./ARCHITECTURE.md#structured-ai-generation-pipeline-phase-3).
+
 Strategy, SEO, Review, Website, and Analytics agents are registered but intentionally return an honest "not implemented yet" rather than a fabricated answer — see [AGENTS.md](./AGENTS.md) for what's built vs. planned.
 
 ## Prerequisites
@@ -65,6 +67,16 @@ curl -X POST http://localhost:3000/content/$CONTENT_ID/publish -H 'Content-Type:
 
 `PUBLISH_PROVIDER` defaults to `mock` — no real social account is ever contacted until a real adapter is configured (see [TOOLS.md](./TOOLS.md)).
 
+### Or use the Phase 3 structured generation endpoint directly
+
+```bash
+curl -X POST http://localhost:3000/clients/cda-septic-systems/ai/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"task":"create_social_post","platform":"FACEBOOK","topic":"a septic installation"}'
+```
+
+Returns `{ content, qaResult, contentId, status, agentUsed, modelProvider, usage }` in one call — `status` is `DRAFT` if Brand QA passed or `REVISION_REQUIRED` if it didn't (the content is saved either way; see [ARCHITECTURE.md](./ARCHITECTURE.md#structured-ai-generation-pipeline-phase-3)).
+
 ## Running with a real model
 
 By default `MODEL_PROVIDER=mock` uses a deterministic, dependency-free content generator — no API key required, and it's what the automated tests use. To use real Claude-generated content:
@@ -93,6 +105,7 @@ ANTHROPIC_MODEL=claude-sonnet-5
 shared/          Core types & interfaces (Tool, Agent, Skill, ModelProvider, client knowledge & Content schemas)
 database/        Prisma schema, migrations, repositories, getClientContext, seed script
 integrations/    Concrete adapters: models (Anthropic/mock), social publishing, website fetch, Google, OpenClaw
+prompts/         Versioned prompt/policy modules: content-generation prompt, Brand QA policy, Orchestrator routing policy
 tools/           The tool abstraction layer agents call instead of hallucinating
 agents/          Orchestrator + specialist agents (Content, Brand QA implemented; others are stubs)
 skills/          Complete user-facing workflows (create-social-post is the one fully built skill)

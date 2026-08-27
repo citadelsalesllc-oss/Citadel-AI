@@ -5,14 +5,18 @@ import { CitadelError } from '@citadel/shared';
 
 const STATUS_BY_CODE: Record<string, number> = {
   CLIENT_NOT_FOUND: 404,
+  CLIENT_NOT_ACTIVE: 422,
   RESOURCE_NOT_FOUND: 404,
   DUPLICATE_RECORD: 409,
   MISSING_INFORMATION: 422,
   NOT_CONFIGURED: 501,
   NOT_IMPLEMENTED: 501,
   VALIDATION_ERROR: 400,
-  BRAND_QA_FAILED: 422,
   INVALID_LIFECYCLE_TRANSITION: 409,
+  // The model provider (or its response) failed — the caller's request was
+  // fine, an upstream dependency wasn't. 502, not 500.
+  MODEL_PROVIDER_ERROR: 502,
+  MALFORMED_MODEL_RESPONSE: 502,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -26,11 +30,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   if (err instanceof CitadelError) {
     const status = STATUS_BY_CODE[err.code] ?? 400;
-    const body: Record<string, unknown> = { error: { message: err.message, code: err.code } };
-    if (err.code === 'BRAND_QA_FAILED' && 'issues' in err) {
-      body.error = { ...(body.error as object), issues: (err as { issues: unknown }).issues };
-    }
-    res.status(status).json(body);
+    res.status(status).json({ error: { message: err.message, code: err.code } });
     return;
   }
 

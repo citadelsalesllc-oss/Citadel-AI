@@ -31,6 +31,7 @@ export function buildContainer(env: Env): Container {
     provider: env.MODEL_PROVIDER,
     anthropicApiKey: env.ANTHROPIC_API_KEY,
     anthropicModel: env.ANTHROPIC_MODEL,
+    timeoutMs: env.MODEL_TIMEOUT_MS,
   });
 
   const publishAdapter = createPublishAdapter({

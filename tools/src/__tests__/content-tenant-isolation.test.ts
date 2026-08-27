@@ -39,7 +39,7 @@ describe('content-lifecycle tools: tenant isolation', () => {
 
   async function createDraftForA(body: string) {
     return contentSaveTool.execute(
-      { clientId: clientA.id, type: 'SOCIAL_POST', body, metadata: {}, tags: [] },
+      { clientId: clientA.id, type: 'SOCIAL_POST', body, metadata: {}, tags: [], initialStatus: 'DRAFT' },
       { ...actorContext, clientId: clientA.id },
     );
   }

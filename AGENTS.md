@@ -4,20 +4,25 @@ All agents implement the shared `Agent<Input, Output>` interface (`shared/src/ag
 
 ## Orchestrator (`agents/src/orchestrator/`) — **implemented**
 
-The entry point. `Orchestrator.handle(request)`:
-1. Resolves the client via the `client_context` tool (fails fast with `ClientNotFoundError` — never falls back to another client).
-2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below.
-3. Delegates and normalizes the outcome into one response shape, including honest `not_implemented` and `unsupported` results (never a fabricated answer, never a crash on an unrecognized request).
+The entry point, with two ways in:
 
-It does not generate content, run QA, or touch the database itself — see `create-social-post` in `skills/` for where that actually happens.
+1. **`Orchestrator.handle(request)`** — free-text entry point:
+   1. Resolves the client via the `client_context` tool (fails fast with `ClientNotFoundError`/`ClientNotActiveError` — never falls back to another client, never acts on an archived one).
+   2. Classifies the instruction (`classifyRequest`, `agents/src/orchestrator/router.ts`) — deterministic keyword routing to either the content-generation skill or one of the five specialist agents below.
+   3. Delegates and normalizes the outcome into one response shape, including honest `not_implemented` and `unsupported` results (never a fabricated answer, never a crash on an unrecognized request).
+2. **`Orchestrator.generateContent(request)`** (Phase 3) — structured entry point for `POST /clients/:clientId/ai/generate`: takes an explicit `{ task, platform, topic, userInstructions? }` instead of free text, validates `task` against `SUPPORTED_STRUCTURED_TASKS` (only `create_social_post` today — anything else throws `NotImplementedError`), and delegates straight to the `create-social-post` skill. See ARCHITECTURE.md "Structured AI generation pipeline."
+
+Either way, the Orchestrator does not generate content, run QA, or touch the database itself — see `create-social-post` in `skills/` for where that actually happens.
 
 ## Content Agent (`agents/src/content/`) — **implemented**
 
-Generates on-brand copy (Facebook/Instagram/Google Business posts, blog, website copy, email) via the injected `ModelProvider`. The system + user prompt (`agents/src/content/prompt.ts`) is built entirely from the client's stored profile — company name, service area, services, phone, offers, preferred/forbidden phrases — with an explicit instruction never to invent facts not listed. Platform determines both formatting guidance and the resulting `ContentType`.
+Generates structured Facebook post copy via the injected `ModelProvider`, returning `{ platform, contentType, content, hashtags, cta, seoKeywordsUsed, notes, modelUsed, providerUsed, usage? }` rather than a raw string. The system + user prompt (`@citadel/prompts`' `contentPromptV1.buildContentSystemPrompt`/`buildContentUserPrompt`) is built entirely from the client's full `ClientContext` — company, services, service areas, brand rules, target audience, SEO profile, offers, marketing notes, and up to 3 recent previous posts for style continuity — with an explicit instruction never to invent facts not present in that context. The model is asked to return JSON matching `ContentGenerationResultSchema`; a response that doesn't parse into that shape throws `MalformedModelResponseError` rather than being guessed at or partially trusted.
+
+Only `platform: 'facebook'` is implemented (`SUPPORTED_GENERATION_PLATFORMS`); Instagram/Google Business/blog/website/email throw `NotImplementedError` — an honest, deliberate MVP narrowing rather than generating an unreviewed shape for platforms the Phase 3 contract doesn't cover yet, even though the platform enum itself still has all six values (so `Orchestrator.handle()`'s free-text router keeps classifying requests exactly as before).
 
 ## Brand QA Agent (`agents/src/brand-qa/`) — **implemented**
 
-Rule-based (not a second model call) gate every generated draft passes through: forbidden-phrase matching, invented-phone-number detection, invented-price detection (blocking), and generic AI-cliché detection (warning, non-blocking). See `agents/src/brand-qa/checks.ts`. A failing (blocking) result raises `BrandQaFailedError` and the content is never saved.
+Rule-based (not a second model call) gate every generated draft passes through, returning `{ passed, issues, warnings }` — see ARCHITECTURE.md "Brand QA" for the full list of checks (forbidden phrases, invented phone/price/location, CTA accuracy, service/location accuracy are blocking; AI clichés, hashtag count, repetition, and unused preferred phrases are warnings). A failing (`passed: false`) result is **never** an error and **never** silently dropped — the calling skill always saves the content, as `REVISION_REQUIRED` instead of `DRAFT`.
 
 ## Strategy Agent (`agents/src/strategist/`) — **stub**
 

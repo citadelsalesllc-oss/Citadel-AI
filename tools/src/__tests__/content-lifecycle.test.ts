@@ -27,7 +27,7 @@ describe('content lifecycle (integration)', () => {
 
   it('walks DRAFT -> REVIEW -> APPROVED -> PUBLISHED', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Hello world', metadata: {}, tags: [] },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Hello world', metadata: {}, tags: [], initialStatus: 'DRAFT' },
       { ...actorContext, clientId: client.id },
     );
     expect(draft.status).toBe('DRAFT');
@@ -56,7 +56,7 @@ describe('content lifecycle (integration)', () => {
 
   it('rejects publishing content that has not been approved', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Not approved yet', metadata: {}, tags: [] },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Not approved yet', metadata: {}, tags: [], initialStatus: 'DRAFT' },
       { ...actorContext, clientId: client.id },
     );
 
@@ -68,7 +68,7 @@ describe('content lifecycle (integration)', () => {
 
   it('supports rejecting content in review', async () => {
     const draft = await contentSaveTool.execute(
-      { clientId: client.id, type: 'SOCIAL_POST', body: 'Needs review', metadata: {}, tags: [] },
+      { clientId: client.id, type: 'SOCIAL_POST', body: 'Needs review', metadata: {}, tags: [], initialStatus: 'DRAFT' },
       { ...actorContext, clientId: client.id },
     );
     await approvalRequestTool.execute({ clientIdOrSlug: client.id, contentId: draft.id }, actorContext);

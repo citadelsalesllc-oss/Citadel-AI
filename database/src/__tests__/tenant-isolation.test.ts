@@ -93,6 +93,7 @@ describe('tenant isolation', () => {
       metadata: {},
       tags: [],
       createdBy: 'test',
+      initialStatus: 'DRAFT',
     });
     const bContent = await contentRepository.listByClient(clientB.id);
     expect(bContent.some((c) => c.body === "A's private draft")).toBe(false);
@@ -106,6 +107,7 @@ describe('tenant isolation', () => {
       metadata: {},
       tags: [],
       createdBy: 'test',
+      initialStatus: 'DRAFT',
     });
 
     await expect(contentRepository.requireByIdForClient(clientB.id, contentA.id)).rejects.toThrow(
@@ -124,6 +126,7 @@ describe('tenant isolation', () => {
       metadata: {},
       tags: [],
       createdBy: 'test',
+      initialStatus: 'DRAFT',
     });
 
     await expect(contentRepository.transition(clientB.id, contentA.id, 'REVIEW')).rejects.toThrow(

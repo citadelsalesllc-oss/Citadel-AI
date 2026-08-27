@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm -r --filter=./shared --filter=./database --filter=./integrations --filter=./tools --filter=./agents --filter=./skills --filter=./apps/* run build",
+    "build": "pnpm -r --filter=./shared --filter=./prompts --filter=./database --filter=./integrations --filter=./tools --filter=./agents --filter=./skills --filter=./apps/* run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",

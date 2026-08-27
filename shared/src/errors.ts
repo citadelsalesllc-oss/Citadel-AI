@@ -80,19 +80,45 @@ export class ValidationError extends CitadelError {
   }
 }
 
-/** Thrown when content fails Brand QA and cannot proceed automatically. */
-export class BrandQaFailedError extends CitadelError {
-  public readonly issues: string[];
-
-  constructor(reasons: string[]) {
-    super(`Brand QA failed: ${reasons.join('; ')}`, 'BRAND_QA_FAILED');
-    this.issues = reasons;
-  }
-}
-
 /** Thrown when an approval-gated action (e.g. publish) is attempted out of order. */
 export class InvalidLifecycleTransitionError extends CitadelError {
   constructor(from: string, to: string) {
     super(`Cannot transition content from ${from} to ${to}`, 'INVALID_LIFECYCLE_TRANSITION');
+  }
+}
+
+/**
+ * Thrown when a client exists but is not in a usable state for AI
+ * generation (e.g. ARCHIVED). Distinct from ClientNotFoundError: the
+ * client was identified, but the Orchestrator's validation step (Phase 3
+ * spec step 3, "validate the client") refused to proceed with it.
+ */
+export class ClientNotActiveError extends CitadelError {
+  constructor(identifier: string, status: string) {
+    super(`Client "${identifier}" is ${status} and cannot be used for generation`, 'CLIENT_NOT_ACTIVE');
+  }
+}
+
+/**
+ * Thrown when the model provider itself fails — network error, API error,
+ * timeout, or any other failure from the underlying SDK/HTTP call. Always
+ * thrown, never smuggled into a success-shaped result — see
+ * ModelProvider's doc comment in model-provider.ts.
+ */
+export class ModelProviderError extends CitadelError {
+  constructor(provider: string, cause: string) {
+    super(`${provider} model provider failed: ${cause}`, 'MODEL_PROVIDER_ERROR');
+  }
+}
+
+/**
+ * Thrown when a provider was asked for structured output (`responseSchema`)
+ * and its response could not be parsed as JSON or didn't match the
+ * requested shape. The caller must never fall back to treating the raw
+ * text as if it had validated.
+ */
+export class MalformedModelResponseError extends CitadelError {
+  constructor(provider: string, detail: string) {
+    super(`${provider} returned a response that did not match the requested structure: ${detail}`, 'MALFORMED_MODEL_RESPONSE');
   }
 }

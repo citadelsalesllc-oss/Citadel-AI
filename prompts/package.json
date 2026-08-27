@@ -1,5 +1,5 @@
 {
-  "name": "@citadel/agents",
+  "name": "@citadel/prompts",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,12 +16,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@citadel/prompts": "workspace:*",
     "@citadel/shared": "workspace:*",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
-    "@citadel/integrations": "workspace:*",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

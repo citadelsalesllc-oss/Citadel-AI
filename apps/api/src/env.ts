@@ -5,6 +5,7 @@ const EnvSchema = z.object({
   MODEL_PROVIDER: z.enum(['mock', 'anthropic']).default('mock'),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+  MODEL_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
   PUBLISH_PROVIDER: z.enum(['mock', 'facebook']).default('mock'),
   FACEBOOK_PAGE_ACCESS_TOKEN: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),

@@ -64,5 +64,14 @@ export const CreateContentItemInputSchema = z.object({
   tags: z.array(z.string()).default([]),
   metadata: z.record(z.unknown()).default({}),
   createdBy: z.string().min(1),
+  /**
+   * Content is normally born DRAFT. The one other allowed starting point is
+   * REVISION_REQUIRED — used when Brand QA fails at generation time (see
+   * ARCHITECTURE.md "Content lifecycle"): the item still gets saved (never
+   * silently discarded) but is flagged for a human before it can re-enter
+   * review. Never anything past REVIEW here — that would bypass the
+   * approval gate.
+   */
+  initialStatus: z.enum(['DRAFT', 'REVISION_REQUIRED']).default('DRAFT'),
 });
 export type CreateContentItemInput = z.infer<typeof CreateContentItemInputSchema>;

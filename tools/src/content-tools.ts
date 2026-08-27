@@ -11,13 +11,15 @@ const ContentSaveInputSchema = z.object({
   campaign: z.string().optional(),
   tags: z.array(z.string()).default([]),
   metadata: z.record(z.unknown()).default({}),
+  /** DRAFT by default; REVISION_REQUIRED when the caller (e.g. the create-social-post skill after a failed Brand QA pass) needs to save without implying it's ready for review. */
+  initialStatus: z.enum(['DRAFT', 'REVISION_REQUIRED']).default('DRAFT'),
 });
 type ContentSaveInput = z.infer<typeof ContentSaveInputSchema>;
 
-/** Persists generated (or manually authored) content as a new DRAFT. Never marks content as published. */
+/** Persists generated (or manually authored) content as DRAFT or REVISION_REQUIRED. Never marks content as published, never skips the approval gate. */
 export const contentSaveTool: Tool<ContentSaveInput, ContentItem> = {
   name: 'content_save',
-  description: 'Save content as a new DRAFT content item for a client. This phase only stores content — no publishing.',
+  description: 'Save content as a new DRAFT (or REVISION_REQUIRED, if it failed QA) content item for a client. This phase only stores content — no publishing.',
   inputSchema: ContentSaveInputSchema,
   async execute(input, context: ToolContext) {
     const item = await contentRepository.create({
@@ -30,6 +32,7 @@ export const contentSaveTool: Tool<ContentSaveInput, ContentItem> = {
       tags: input.tags,
       metadata: input.metadata,
       createdBy: context.actor.label,
+      initialStatus: input.initialStatus,
     });
     await auditRepository.record({
       clientId: input.clientId,

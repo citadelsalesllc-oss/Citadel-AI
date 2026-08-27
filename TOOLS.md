@@ -7,7 +7,7 @@ Tools are the only way agents touch real data or external systems — they never
 | `client_lookup` | Postgres (`clientRepository`) — core record only | Real |
 | `client_context` | Postgres (`getClientContext`) — full aggregated knowledge, see ARCHITECTURE.md | Real |
 | `client_update` | Postgres, audit-logged | Real |
-| `content_save` | Postgres, creates `DRAFT`, audit-logged | Real |
+| `content_save` | Postgres, creates `DRAFT` or `REVISION_REQUIRED` (via `initialStatus`, default `DRAFT`), audit-logged | Real |
 | `content_search` | Postgres | Real |
 | `approval_request` | Postgres, `DRAFT/REVISION_REQUIRED -> REVIEW` | Real |
 | `content_approve` | Postgres, `REVIEW -> APPROVED` | Real |
@@ -19,6 +19,8 @@ Tools are the only way agents touch real data or external systems — they never
 | `review_lookup` | none — no review platform configured | Stub (`NotConfiguredError`) |
 | `analytics_lookup` | none — no analytics platform configured | Stub (`NotConfiguredError`) |
 | `web_search` | none — no search provider configured | Stub (returns `{results: [], note: "..."}`, never fabricates results) |
+
+`content_save`'s `initialStatus` exists for the Phase 3 structured generation pipeline (`create-social-post` skill, driven by `POST /clients/:clientId/ai/generate`): when Brand QA fails, the generated content is still saved — as `REVISION_REQUIRED` rather than `DRAFT` — so a QA failure is visible and actionable instead of silently discarded or misleadingly presented as approval-ready. See ARCHITECTURE.md "Content lifecycle & approval gate" and "Structured AI generation pipeline."
 
 ## Approval & publishing tools in detail
 

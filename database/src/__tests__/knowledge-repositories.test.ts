@@ -127,6 +127,7 @@ describe('knowledge repositories', () => {
       tags: ['promo', 'seasonal'],
       metadata: {},
       createdBy: 'test',
+      initialStatus: 'DRAFT',
     });
 
     expect(item.platform).toBe('facebook');

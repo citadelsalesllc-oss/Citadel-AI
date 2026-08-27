@@ -36,6 +36,7 @@ describe('getClientContext', () => {
       metadata: {},
       tags: [],
       createdBy: 'test',
+      initialStatus: 'DRAFT',
     });
 
     const context = await getClientContext(client.id);

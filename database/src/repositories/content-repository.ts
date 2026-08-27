@@ -56,7 +56,7 @@ export const contentRepository = {
       data: {
         clientId: input.clientId,
         type: input.type,
-        status: 'DRAFT',
+        status: input.initialStatus,
         platform: input.platform,
         title: input.title,
         body: input.body,
